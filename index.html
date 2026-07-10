@@ -52,7 +52,7 @@ const {
 const CONFIG = {
   SUPABASE_URL: "https://leqxjjcwgsulyidlgacr.supabase.co",
   SUPABASE_KEY: "sb_publishable_kTkxLLUKROIpTW9TgtGcTQ_2cQxcdES",
-  EMAIL_PROXY_URL: "https://YOUR-PROXY.onrender.com/send-email",
+  EMAIL_PROXY_URL: "https://bayani-email-proxy.onrender.com/send-email",
   // palitan after mo i-deploy yung email proxy
   ADMIN_PASSWORD: "smbvs2026",
   // PALITAN MO ITO
@@ -74,6 +74,34 @@ if (typeof supabase === "undefined") {
 } else {
   sb = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
 }
+
+/* ===== Admin password (hashed, stored in Supabase settings table) ===== */
+async function hashPw(pw) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('bayani-salt-' + pw));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+async function verifyAdmin(pw) {
+  try {
+    const { data } = await sb.from('settings').select('value').eq('key', 'admin_pw_hash').maybeSingle();
+    if (data && data.value) return (await hashPw(pw)) === data.value;
+  } catch (e) {}
+  return pw === CONFIG.ADMIN_PASSWORD; // fallback: default password kung wala pang na-save
+}
+async function changeAdminPw() {
+  const cur = prompt('Current password:');
+  if (cur === null) return;
+  if (!(await verifyAdmin(cur))) { alert('Wrong current password 😅'); return; }
+  const nw = prompt('New password (min 6 characters):');
+  if (nw === null) return;
+  if (!nw || nw.length < 6) { alert('Password too short — min 6 characters.'); return; }
+  const nw2 = prompt('Retype new password:');
+  if (nw2 !== nw) { alert('Passwords do not match.'); return; }
+  const hash = await hashPw(nw);
+  const { error } = await sb.from('settings').upsert({ key: 'admin_pw_hash', value: hash });
+  if (error) alert('Failed to save — did you run the settings SQL? (' + error.message + ')');
+  else alert('✅ Password changed! Use the new password on your next login.');
+}
+
 async function askClaude(prompt, maxTokens = 1000, pdfB64 = null) {
   const msgs = pdfB64 ? [{
     role: "user",
@@ -1016,7 +1044,7 @@ function Admin() {
           value: "new",
           children: "Sort: Newest"
         }, void 0, false)]
-      }, void 0, true)]
+      }, void 0, true), /*#__PURE__*/_jsxDEV("button", { className: "btn2 text-xs", style: { marginLeft: "auto" }, onClick: () => changeAdminPw(), children: "🔑 Change password" }, void 0, false)]
     }, void 0, true), loading && /*#__PURE__*/_jsxDEV("p", {
       className: "text-center opacity-60 py-6",
       children: "Loading… 🌙"
@@ -1284,12 +1312,12 @@ function App() {
         value: pw,
         onChange: e => setPw(e.target.value),
         onKeyDown: e => {
-          if (e.key === "Enter" && pw === CONFIG.ADMIN_PASSWORD) setAuthed(true);
+          if (e.key === "Enter") verifyAdmin(pw).then(ok => { if (ok) setAuthed(true); else alert("Wrong password, partner 😅"); });
         }
       }, void 0, false), /*#__PURE__*/_jsxDEV("button", {
         className: "btn w-full mt-3",
         onClick: () => {
-          if (pw === CONFIG.ADMIN_PASSWORD) setAuthed(true);else alert("Wrong password, partner 😅");
+          verifyAdmin(pw).then(ok => { if (ok) setAuthed(true); else alert("Wrong password, partner 😅"); });
         },
         children: "Login"
       }, void 0, false)]
