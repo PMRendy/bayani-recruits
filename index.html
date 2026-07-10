@@ -25,6 +25,22 @@
 </head>
 <body>
 <div id="root"></div>
+<script>
+// Watchdog: kung 6 seconds walang na-render, may script na hindi nag-load
+setTimeout(function(){
+  var r = document.getElementById("root");
+  if (r && !r.hasChildNodes()) {
+    var missing = [];
+    if (typeof React === "undefined") missing.push("React");
+    if (typeof ReactDOM === "undefined") missing.push("ReactDOM");
+    if (typeof Babel === "undefined") missing.push("Babel");
+    if (typeof supabase === "undefined") missing.push("Supabase");
+    r.innerHTML = '<div style="max-width:600px;margin:80px auto;padding:24px;background:#161c38;border:1px solid #f5c542;border-radius:14px;font-size:14px;color:#e8eaf6;line-height:1.6;">⚠️ <b>App did not start.</b><br><br>' +
+      (missing.length ? 'Failed to load: <b style="color:#f87171">' + missing.join(", ") + '</b><br><br>Usual causes: (1) mabagal o walang internet, (2) ad-blocker / browser extension blocking CDN scripts, (3) firewall. Try a hard refresh (CTRL+SHIFT+R), another browser, or incognito mode.' :
+      'Scripts loaded pero may runtime error. Open the browser console (F12 → Console tab), screenshot the red error, and send it to Claude.') + '</div>';
+  }
+}, 6000);
+</script>
 <script type="text/babel" data-presets="react">
 const { useState, useEffect, useRef, useMemo } = React;
 
@@ -40,7 +56,19 @@ const CONFIG = {
 };
 /* ========================================== */
 
-const sb = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
+// Visible error reporting — kung may sumabog, makikita sa screen imbes na blank
+window.onerror = function(msg, src, line) {
+  const r = document.getElementById("root");
+  if (r && !r.hasChildNodes()) r.innerHTML = '<div style="max-width:600px;margin:80px auto;padding:24px;background:#161c38;border:1px solid #f87171;border-radius:14px;font-family:monospace;font-size:13px;color:#f87171;">⚠️ App error:<br><br>' + msg + '<br><br><span style="color:#8f9bd4">Line ' + line + ' — screenshot this and send it to Claude 😄</span></div>';
+  return false;
+};
+
+let sb = null;
+if (typeof supabase === "undefined") {
+  window.onerror("Supabase library failed to load. Check internet connection or ad-blocker, then refresh.", "", 0);
+} else {
+  sb = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
+}
 
 async function askClaude(prompt, maxTokens = 1000, pdfB64 = null) {
   const msgs = pdfB64
