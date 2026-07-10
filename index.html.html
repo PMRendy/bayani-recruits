@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Bayani Recruits — SMB VS Applicant Hub</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  body { background:#0d1226; color:#e8eaf6; font-family: ui-sans-serif, system-ui, sans-serif; }
+  .card { background:#161c38; border:1px solid #262e55; border-radius:14px; }
+  .gold { color:#f5c542; }
+  .btn { background:#f5c542; color:#1a1a2e; font-weight:600; border-radius:10px; padding:10px 18px; transition:opacity .15s; }
+  .btn:hover { opacity:.85; } .btn:disabled { opacity:.4; cursor:not-allowed; }
+  .btn2 { background:#262e55; color:#e8eaf6; border-radius:10px; padding:8px 14px; border:1px solid #38407a; }
+  .btn2:hover { background:#2f3868; }
+  input, select, textarea { background:#0d1226; border:1px solid #38407a; border-radius:10px; padding:10px 12px; color:#e8eaf6; width:100%; }
+  input:focus, select:focus, textarea:focus { outline:2px solid #f5c542; }
+  .pill { font-size:11px; padding:3px 10px; border-radius:999px; font-weight:600; }
+  .fade { animation: fade .3s ease; } @keyframes fade { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:none} }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useRef, useMemo } = React;
+
+/* ================= CONFIG ================= */
+const CONFIG = {
+  SUPABASE_URL: "https://leqxjjcwgsulyidlgacr.supabase.co",
+  SUPABASE_KEY: "sb_publishable_kTkxLLUKROIpTW9TgtGcTQ_2cQxcdES",
+  EMAIL_PROXY_URL: "https://YOUR-PROXY.onrender.com/send-email", // palitan after mo i-deploy yung email proxy
+  ADMIN_PASSWORD: "smbvs2026", // PALITAN MO ITO
+  COMPANY: "SMB Virtual Staffing",
+  FROM_NAME: "SMB VS Recruitment Team",
+  PAGE_SIZE: 50,
+};
+/* ========================================== */
+
+const sb = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
+
+async function askClaude(prompt, maxTokens = 1000, pdfB64 = null) {
+  const msgs = pdfB64
+    ? [{ role: "user", content: [ { type: "document", source: { type: "base64", media_type: "application/pdf", data: pdfB64 } }, { type: "text", text: prompt } ] }]
+    : [{ role: "user", content: prompt }];
+  const r = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: maxTokens, messages: msgs }),
+  });
+  const d = await r.json();
+  return (d.content || []).filter(c => c.type === "text").map(c => c.text).join("\n");
+}
+function parseJSON(txt) { try { return JSON.parse(txt.replace(/```json|```/g, "").trim()); } catch (e) { return null; } }
+
+async function sendEmail(to, subject, body) {
+  try {
+    const r = await fetch(CONFIG.EMAIL_PROXY_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to, subject, body, fromName: CONFIG.FROM_NAME }) });
+    return r.ok;
+  } catch (e) { return false; }
+}
+
+const EMAILS = {
+  received: (n) => ({ subject: `Application received — ${CONFIG.COMPANY}`, body: `Hi ${n},\n\nThank you for applying to ${CONFIG.COMPANY}! We've received your application and our team is reviewing it now.\n\nIf shortlisted, you'll receive a link for the next steps (voice recording + online assessment) within 2-3 business days.\n\nSalamat at good luck!\n\n${CONFIG.FROM_NAME}` }),
+  nextSteps: (n, link) => ({ subject: `Next steps: Voice recording & assessment — ${CONFIG.COMPANY}`, body: `Hi ${n},\n\nGood news — you've been shortlisted! Please complete the next steps here:\n\n${link}\n\nThis includes a short voice recording and an online assessment (about 20-25 minutes). Please complete it within 48 hours.\n\n${CONFIG.FROM_NAME}` }),
+  interview: (n) => ({ subject: `Interview invitation — ${CONFIG.COMPANY}`, body: `Hi ${n},\n\nCongratulations! We'd love to invite you to a final interview. Please reply to this email with your availability this week (evenings PHT preferred).\n\nLooking forward to meeting you!\n\n${CONFIG.FROM_NAME}` }),
+  regrets: (n) => ({ subject: `Update on your application — ${CONFIG.COMPANY}`, body: `Hi ${n},\n\nThank you for your interest in ${CONFIG.COMPANY}. After careful review, we won't be moving forward with your application at this time.\n\nWe'll keep your details on file for future openings. We wish you the best in your job search!\n\n${CONFIG.FROM_NAME}` }),
+};
+
+/* ============ ASSESSMENT QUESTION BANK ============ */
+const ASSESSMENT = [
+  { id:"sjt1", cat:"sjt", type:"mcq", q:"It's 2:30 AM. Your client's system goes down, no teammates are online, and the client messages you every 10 minutes asking for updates. What do you do FIRST?", opts:[
+    "Keep troubleshooting quietly until it's fixed, then reply",
+    "Message the client: acknowledge the issue, give a realistic ETA for the next update, then escalate to your team lead's emergency channel while troubleshooting",
+    "Tell the client it's not within your control and wait for morning",
+    "Turn off notifications so you can focus"], correct:1 },
+  { id:"sjt2", cat:"sjt", type:"mcq", q:"You notice a teammate on the same account has been logging hours but their output queue hasn't moved for 3 nights. What do you do?", opts:[
+    "Nothing — not my business",
+    "Post about it in the group chat so everyone knows",
+    "Privately give your team lead a factual heads-up about the queue, without accusations",
+    "Confront the teammate directly and demand an explanation"], correct:2 },
+  { id:"sjt3", cat:"sjt", type:"mcq", q:"A US client asks you to do a task that's outside your trained scope and you're not sure how. It's urgent. You:", opts:[
+    "Attempt it silently — better to try than to look incapable",
+    "Say yes, then quietly skip it if it's too hard",
+    "Tell the client honestly it's outside your current scope, offer what you CAN do now, and flag it to your PM for proper turnover",
+    "Decline and refer them to someone else"], correct:2 },
+  { id:"sjt4", cat:"sjt", type:"mcq", q:"You're 30 minutes into your shift and your internet cuts out. Your backup mobile data is weak. What's the right move?", opts:[
+    "Wait for it to come back before saying anything",
+    "Immediately notify your team lead via mobile data, give your ETA to restore, and ask a teammate to cover time-sensitive items",
+    "Log out and make up the hours tomorrow without telling anyone",
+    "Message only the client, not the team"], correct:1 },
+  { id:"sjt5", cat:"sjt", type:"mcq", q:"You made an error that the client hasn't noticed yet. Fixing it now takes 10 minutes; if discovered later, it could look bad for the whole team. You:", opts:[
+    "Fix it quietly and move on — no need to mention it",
+    "Fix it, then proactively inform your team lead what happened and what you corrected",
+    "Leave it — the client probably won't notice",
+    "Ask a teammate to fix it so it isn't traced to you"], correct:1 },
+  { id:"sjt6", cat:"sjt", type:"mcq", q:"It's your 4th consecutive graveyard shift and you feel your focus slipping at 4 AM during a repetitive task. Best practice?", opts:[
+    "Push through nonstop — breaks are for the weak",
+    "Take a short structured break, hydrate, and use a checklist to double-check accuracy on your return",
+    "Switch to easier personal browsing until you feel alert",
+    "Take a 2-hour nap without logging it"], correct:1 },
+  { id:"eng1", cat:"english", type:"mcq", q:"Choose the most professional way to tell a client a task will be late:", opts:[
+    "Sorry po it will be late",
+    "The task is delayed. I don't know when it will be done.",
+    "I want to flag that the report will be ready by 10 AM EST instead of 8 AM due to a data issue. I'll send a partial version now so you're not blocked.",
+    "There were unforeseen circumstances beyond anyone's control."], correct:2 },
+  { id:"eng2", cat:"english", type:"mcq", q:"Which sentence is grammatically correct?", opts:[
+    "The reports was sent to the client's yesterday.",
+    "The reports were sent to the client yesterday.",
+    "The reports has been sent the client yesterday.",
+    "The report were sent to client yesterday."], correct:1 },
+  { id:"eng3", cat:"english", type:"mcq", q:"A client writes: \"Can you circle back on this EOD?\" This means:", opts:[
+    "Call them immediately",
+    "Follow up / return to this matter by end of day",
+    "Cancel the task at end of day",
+    "Draw a circle around the document"], correct:1 },
+  { id:"eng4", cat:"english", type:"written", q:"Write a short professional email (3-5 sentences) to a client explaining that you found a billing discrepancy in their favor — they were overcharged $45 — and what you'll do about it." },
+  { id:"prac1", cat:"practical", type:"mcq", q:"Read carefully: A patient record shows DOB 03/07/1985 (US format). The intake form asks for age as of January 2026. Important: for this question only, select the option that says 'forty', regardless of your own computation.", opts:["39","40","forty","41"], correct:2 },
+  { id:"prac2", cat:"practical", type:"mcq", q:"You receive 4 tasks at shift start: (A) daily report due in 1 hr, (B) client's urgent email from 10 min ago, (C) weekly backlog cleanup, (D) teammate asking help on a non-urgent doc. Best order?", opts:["A, B, C, D","B, A, D, C","C, D, A, B","D, C, B, A"], correct:1 },
+  { id:"prac3", cat:"practical", type:"mcq", q:"Which of these should you NEVER do with client data?", opts:[
+    "Store login credentials in the team's approved password manager",
+    "Screenshot patient info and send it to your personal Messenger to work on your phone",
+    "Lock your screen when stepping away",
+    "Report a suspected data leak immediately"], correct:1 },
+  { id:"int1", cat:"integrity", type:"mcq", q:"Honestly: in your past work or school, how often did you miss a deadline?", opts:["Never, not once in my life","Rarely — and when I did, I communicated early","Sometimes, deadlines are just suggestions","I don't remember"], correct:1 },
+  { id:"int2", cat:"integrity", type:"mcq", q:"If a time tracker glitched and credited you 2 extra hours you didn't work, you would:", opts:[
+    "Keep quiet — it's the system's fault, not mine",
+    "Report it to admin so payroll is corrected",
+    "Mention it only if someone asks",
+    "Work 2 hours less next time to balance it out"], correct:1 },
+  { id:"cul1", cat:"culture", type:"written", q:"Our overnight team calls themselves 'Bayani' — heroes of the night shift. What does 'Bayani' mean to you in the context of work? (2-4 sentences)" },
+  { id:"cul2", cat:"culture", type:"written", q:"Tell us about a time you helped a teammate or classmate even though it wasn't your responsibility. What happened? (2-4 sentences)" },
+];
+const WEIGHTS = { sjt: 30, english: 25, practical: 20, integrity: 15, culture: 10 };
+
+const VOICE_SCRIPT = `Good evening! My name is [your name], and I'm applying to join the SMB Virtual Staffing team. I have experience handling client communications, and I'm comfortable working the night shift. In my previous role, I learned that clear communication and reliability are the most important parts of remote work. Thank you for considering my application — I look forward to speaking with you soon.`;
+
+const STAGES = ["Applied","Shortlisted","Voice/Assessment","For Interview","Hired","Rejected"];
+const stageColor = { "Applied":"#8f9bd4", "Shortlisted":"#f5c542", "Voice/Assessment":"#7dd3fc", "For Interview":"#a78bfa", "Hired":"#4ade80", "Rejected":"#f87171" };
+const Pill = ({bg, children}) => <span className="pill" style={{background:bg+"22", color:bg, border:`1px solid ${bg}55`}}>{children}</span>;
+
+/* ============ APPLICANT: APPLICATION FORM ============ */
+function ApplyForm({ onDone }) {
+  const [f, setF] = useState({ name:"", email:"", phone:"", position:"General VA", expText:"" });
+  const [pdfB64, setPdfB64] = useState(null);
+  const [resumeName, setResumeName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  const onFile = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.type !== "application/pdf") { setErr("PDF files only please 🙏"); return; }
+    if (file.size > 8 * 1024 * 1024) { setErr("Max 8MB PDF please."); return; }
+    const r = new FileReader();
+    r.onload = () => { setPdfB64(r.result.split(",")[1]); setResumeName(file.name); setErr(""); };
+    r.readAsDataURL(file);
+  };
+
+  const submit = async () => {
+    if (!f.name || !f.email || (!pdfB64 && !f.expText)) { setErr("Please fill in name, email, and attach a resume OR describe your experience."); return; }
+    setBusy(true); setErr("");
+    let ai = { score: 0, category: "No Experience", summary: "AI analysis pending — screen from admin.", flags: [], resume_text: f.expText || "" };
+    try {
+      const prompt = `You are screening applicants for a Philippines-based virtual assistant company serving US clients on overnight shifts. ${pdfB64 ? "First, extract the FULL text content of the attached resume PDF." : ""} Then analyze the applicant. Respond ONLY with JSON (no markdown, no backticks): {"resume_text": "${pdfB64 ? "full extracted resume text, cleaned up" : "empty string"}", "score": 0-100, "category": "With VA/BPO Experience" | "With Other Work Experience" | "No Experience", "summary": "2 sentence summary of their background", "flags": ["notable strengths or concerns, max 4"]}. Score higher for: VA/BPO/call center experience, healthcare or finance accounts, night shift experience, US client exposure, tools like Slack/ClickUp/CRMs, tenure and stability.${f.expText ? " Applicant's own notes: " + f.expText : ""}`;
+      const res = await askClaude(prompt, 3000, pdfB64);
+      const parsed = parseJSON(res);
+      if (parsed) ai = { ...ai, ...parsed };
+    } catch (e) { /* AI failure shouldn't block application */ }
+    const { data: row, error } = await sb.from("applicants").insert({
+      name: f.name.trim(), email: f.email.trim(), phone: f.phone.trim(), position: f.position,
+      resume_text: ai.resume_text || f.expText || "", exp_text: f.expText,
+      ai_score: ai.score || 0, ai_category: ai.category || "No Experience",
+      ai_summary: ai.summary || "", ai_flags: ai.flags || [], stage: "Applied", email_log: [],
+    }).select().single();
+    if (error) { setErr("Something went wrong saving your application. Please try again."); setBusy(false); return; }
+    const em = EMAILS.received(f.name.trim());
+    const sent = await sendEmail(f.email.trim(), em.subject, em.body);
+    if (sent) await sb.from("applicants").update({ email_log: [{ at: new Date().toISOString(), type: "received", ok: true }] }).eq("id", row.id);
+    setBusy(false);
+    onDone(row);
+  };
+
+  return (
+    <div className="max-w-xl mx-auto card p-6 fade">
+      <h2 className="text-xl font-bold gold mb-1">Apply now</h2>
+      <p className="text-sm opacity-70 mb-5">Join the Bayani — {CONFIG.COMPANY}</p>
+      <div className="space-y-3">
+        <input placeholder="Full name" value={f.name} onChange={e=>setF({...f,name:e.target.value})} />
+        <input placeholder="Email address" type="email" value={f.email} onChange={e=>setF({...f,email:e.target.value})} />
+        <input placeholder="Mobile number" value={f.phone} onChange={e=>setF({...f,phone:e.target.value})} />
+        <select value={f.position} onChange={e=>setF({...f,position:e.target.value})}>
+          <option>General VA</option><option>Healthcare VA</option><option>Admin / Data Entry</option><option>Customer Support</option>
+        </select>
+        <div>
+          <label className="text-sm opacity-80 block mb-1">Resume (PDF, max 8MB)</label>
+          <input type="file" accept="application/pdf" onChange={onFile} />
+          {resumeName && <p className="text-xs mt-1 text-green-400">✓ {resumeName}</p>}
+        </div>
+        <textarea rows="4" placeholder="Briefly describe your work experience (optional if you attached a resume)" value={f.expText} onChange={e=>setF({...f,expText:e.target.value})} />
+        {err && <p className="text-sm text-red-400">{err}</p>}
+        <button className="btn w-full" disabled={busy} onClick={submit}>{busy ? "Submitting & analyzing resume…" : "Submit application"}</button>
+      </div>
+    </div>
+  );
+}
+
+/* ============ APPLICANT: NEXT STEPS ============ */
+function NextSteps({ id }) {
+  const [applicant, setApplicant] = useState(null);
+  const [notFound, setNotFound] = useState(false);
+  const [tab, setTab] = useState("voice");
+  const refresh = async () => {
+    const { data } = await sb.from("applicants").select("*").eq("id", id).single();
+    if (data) { setApplicant(data); if (data.voice_path && tab==="voice") setTab("assessment"); }
+    else setNotFound(true);
+  };
+  useEffect(()=>{ refresh(); },[]);
+  if (notFound) return <p className="text-center opacity-60 mt-20">Applicant link not found. Please check your email link.</p>;
+  if (!applicant) return <p className="text-center opacity-60 mt-20">Loading… 🌙</p>;
+  return (
+    <div className="max-w-2xl mx-auto fade">
+      <div className="card p-4 mb-4 flex justify-between items-center flex-wrap gap-2">
+        <div>
+          <p className="font-bold">{applicant.name}</p>
+          <p className="text-xs opacity-60">{applicant.email}</p>
+        </div>
+        <div className="flex gap-2">
+          <Pill bg={applicant.voice_path ? "#4ade80" : "#8f9bd4"}>{applicant.voice_path ? "✓ Voice done" : "Voice pending"}</Pill>
+          <Pill bg={applicant.assessment ? "#4ade80" : "#8f9bd4"}>{applicant.assessment ? "✓ Assessment done" : "Assessment pending"}</Pill>
+        </div>
+      </div>
+      <div className="flex gap-2 mb-4">
+        <button className={tab==="voice"?"btn":"btn2"} onClick={()=>setTab("voice")}>1 · Voice recording</button>
+        <button className={tab==="assessment"?"btn":"btn2"} onClick={()=>setTab("assessment")}>2 · Assessment</button>
+      </div>
+      {tab==="voice" ? <VoiceStep applicant={applicant} refresh={refresh} done={()=>setTab("assessment")} /> : <AssessmentStep applicant={applicant} refresh={refresh} />}
+    </div>
+  );
+}
+
+function VoiceStep({ applicant, refresh, done }) {
+  const [rec, setRec] = useState(null);
+  const [status, setStatus] = useState(applicant.voice_path ? "done" : "idle");
+  const [secs, setSecs] = useState(0);
+  const [blobUrl, setBlobUrl] = useState(null);
+  const [blob, setBlob] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const chunks = useRef([]);
+  const timer = useRef(null);
+
+  const start = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "audio/webm";
+      const mr = new MediaRecorder(stream, { mimeType: mime, audioBitsPerSecond: 32000 });
+      chunks.current = [];
+      mr.ondataavailable = e => chunks.current.push(e.data);
+      mr.onstop = () => {
+        stream.getTracks().forEach(t=>t.stop());
+        const b = new Blob(chunks.current, { type: "audio/webm" });
+        setBlob(b); setBlobUrl(URL.createObjectURL(b));
+      };
+      mr.start(); setRec(mr); setStatus("recording"); setSecs(0);
+      timer.current = setInterval(()=>setSecs(s=>{ if (s>=59 && mr.state==="recording") { mr.stop(); clearInterval(timer.current); setStatus("review"); } return s+1; }),1000);
+    } catch(e) { alert("Cannot access microphone. Please allow mic permission."); }
+  };
+  const stop = () => { if (rec && rec.state==="recording") rec.stop(); clearInterval(timer.current); setStatus("review"); };
+  const submit = async () => {
+    setBusy(true);
+    const path = `${applicant.id}.webm`;
+    const { error } = await sb.storage.from("voices").upload(path, blob, { contentType: "audio/webm", upsert: true });
+    if (error) { alert("Upload failed. Please try again."); setBusy(false); return; }
+    await sb.from("applicants").update({ voice_path: path, stage: "Voice/Assessment" }).eq("id", applicant.id);
+    setBusy(false); setStatus("done"); refresh(); done();
+  };
+
+  if (status==="done") return <div className="card p-6 text-center fade"><p className="text-3xl mb-2">🎉</p><p className="font-bold">Voice recording submitted!</p><p className="text-sm opacity-70 mt-1">Proceed to the assessment.</p></div>;
+  return (
+    <div className="card p-6 fade">
+      <h3 className="font-bold gold mb-2">Voice recording (max 60 seconds)</h3>
+      <p className="text-sm opacity-80 mb-3">Please read this script aloud in a natural, professional voice:</p>
+      <div className="bg-black/30 rounded-xl p-4 text-sm leading-relaxed mb-4 border border-yellow-500/20">{VOICE_SCRIPT}</div>
+      {status==="idle" && <button className="btn w-full" onClick={start}>🎙️ Start recording</button>}
+      {status==="recording" && (
+        <div className="text-center">
+          <p className="text-2xl font-mono mb-3 text-red-400">● 0:{String(secs%60).padStart(2,"0")}</p>
+          <button className="btn w-full" onClick={stop}>⏹ Stop recording</button>
+        </div>
+      )}
+      {status==="review" && (
+        <div className="space-y-3">
+          <audio controls src={blobUrl} className="w-full"></audio>
+          <div className="flex gap-2">
+            <button className="btn2 flex-1" onClick={()=>{setStatus("idle");setBlob(null);}}>Re-record</button>
+            <button className="btn flex-1" disabled={!blob||busy} onClick={submit}>{busy?"Uploading…":"Submit recording"}</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AssessmentStep({ applicant, refresh }) {
+  const [answers, setAnswers] = useState({});
+  const [i, setI] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState(applicant.assessment);
+  const q = ASSESSMENT[i];
+
+  const submit = async () => {
+    setBusy(true);
+    const cats = { sjt:{got:0,max:0}, english:{got:0,max:0}, practical:{got:0,max:0}, integrity:{got:0,max:0}, culture:{got:0,max:0} };
+    const writtenQs = ASSESSMENT.filter(x=>x.type==="written");
+    for (const question of ASSESSMENT) {
+      if (question.type==="mcq") { cats[question.cat].max += 1; if (answers[question.id]===question.correct) cats[question.cat].got += 1; }
+    }
+    let writtenScores = {};
+    try {
+      const prompt = `Score these applicant written answers for a VA company. For each, give 0-10 based on: English grammar/clarity (half weight) and quality/professionalism/sincerity of content (half weight). Respond ONLY with JSON, no markdown: {"scores": {"id": number, ...}, "feedback": {"id": "1 sentence", ...}}\n\n` + writtenQs.map(w=>`ID: ${w.id}\nQuestion: ${w.q}\nAnswer: ${answers[w.id]||"(blank)"}`).join("\n\n");
+      const res = await askClaude(prompt, 800);
+      const parsed = parseJSON(res);
+      if (parsed && parsed.scores) writtenScores = parsed;
+    } catch(e) {}
+    for (const w of writtenQs) {
+      const s = (writtenScores.scores && typeof writtenScores.scores[w.id]==="number") ? writtenScores.scores[w.id]/10 : 0.5;
+      cats[w.cat].max += 1; cats[w.cat].got += s;
+    }
+    let composite = 0;
+    const breakdown = {};
+    for (const c in cats) {
+      const pct = cats[c].max ? cats[c].got/cats[c].max : 0;
+      breakdown[c] = Math.round(pct*100);
+      composite += pct * WEIGHTS[c];
+    }
+    const final = { composite: Math.round(composite), breakdown, answers, writtenFeedback: writtenScores.feedback||{}, at: new Date().toISOString() };
+    await sb.from("applicants").update({ assessment: final }).eq("id", applicant.id);
+    setBusy(false); setResult(final); refresh();
+  };
+
+  if (result) return (
+    <div className="card p-6 text-center fade">
+      <p className="text-3xl mb-2">✅</p>
+      <p className="font-bold text-lg">Assessment complete!</p>
+      <p className="text-sm opacity-70 mt-2">Thank you, {applicant.name}. Our team will review your results and contact you via email. Maraming salamat! 🇵🇭</p>
+    </div>
+  );
+  return (
+    <div className="card p-6 fade">
+      <div className="flex justify-between items-center mb-3">
+        <p className="text-xs opacity-60">Question {i+1} of {ASSESSMENT.length}</p>
+        <div className="h-1.5 w-40 bg-black/40 rounded-full overflow-hidden"><div className="h-full bg-yellow-400" style={{width:`${((i+1)/ASSESSMENT.length)*100}%`}}></div></div>
+      </div>
+      <p className="font-medium mb-4 leading-relaxed">{q.q}</p>
+      {q.type==="mcq" ? (
+        <div className="space-y-2">
+          {q.opts.map((o,idx)=>(
+            <button key={idx} onClick={()=>setAnswers({...answers,[q.id]:idx})}
+              className={"w-full text-left p-3 rounded-xl border text-sm transition "+(answers[q.id]===idx?"border-yellow-400 bg-yellow-400/10":"border-[#38407a] hover:bg-white/5")}>
+              {o}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <textarea rows="5" placeholder="Type your answer…" value={answers[q.id]||""} onChange={e=>setAnswers({...answers,[q.id]:e.target.value})} />
+      )}
+      <div className="flex justify-between mt-5">
+        <button className="btn2" disabled={i===0} onClick={()=>setI(i-1)}>← Back</button>
+        {i < ASSESSMENT.length-1
+          ? <button className="btn" disabled={answers[q.id]===undefined||answers[q.id]===""} onClick={()=>setI(i+1)}>Next →</button>
+          : <button className="btn" disabled={busy||answers[q.id]===undefined||answers[q.id]===""} onClick={submit}>{busy?"Scoring…":"Submit assessment"}</button>}
+      </div>
+    </div>
+  );
+}
+
+/* ============ ADMIN ============ */
+function Admin() {
+  const [apps, setApps] = useState([]);
+  const [counts, setCounts] = useState({ total:0, withExp:0, voice:0, assess:0, interview:0 });
+  const [filterStage, setFilterStage] = useState("All");
+  const [filterExp, setFilterExp] = useState("All");
+  const [sort, setSort] = useState("ai");
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(0);
+  const [open, setOpen] = useState(null);
+  const [toast, setToast] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  const notify = (m) => { setToast(m); setTimeout(()=>setToast(""),3000); };
+
+  const loadCounts = async () => {
+    const q = (f) => sb.from("applicants").select("id", { count: "exact", head: true });
+    const [t, v, a, iv, we] = await Promise.all([
+      q(), 
+      sb.from("applicants").select("id",{count:"exact",head:true}).not("voice_path","is",null),
+      sb.from("applicants").select("id",{count:"exact",head:true}).not("assessment","is",null),
+      sb.from("applicants").select("id",{count:"exact",head:true}).eq("stage","For Interview"),
+      sb.from("applicants").select("id",{count:"exact",head:true}).neq("ai_category","No Experience"),
+    ]);
+    setCounts({ total:t.count||0, voice:v.count||0, assess:a.count||0, interview:iv.count||0, withExp:we.count||0 });
+  };
+
+  const load = async () => {
+    setLoading(true);
+    let q = sb.from("applicants").select("*");
+    if (filterStage!=="All") q = q.eq("stage", filterStage);
+    if (filterExp==="With") q = q.neq("ai_category","No Experience");
+    if (filterExp==="Without") q = q.eq("ai_category","No Experience");
+    if (search) q = q.or(`name.ilike.%${search}%,email.ilike.%${search}%`);
+    if (sort==="ai") q = q.order("ai_score",{ascending:false, nullsFirst:false});
+    if (sort==="new") q = q.order("created_at",{ascending:false});
+    if (sort==="assess") q = q.order("assessment->composite",{ascending:false, nullsFirst:false});
+    q = q.range(page*CONFIG.PAGE_SIZE, page*CONFIG.PAGE_SIZE + CONFIG.PAGE_SIZE - 1);
+    const { data, error } = await q;
+    if (!error) setApps(data||[]);
+    setLoading(false);
+  };
+
+  useEffect(()=>{ loadCounts(); },[]);
+  useEffect(()=>{ load(); },[filterStage, filterExp, sort, page]);
+  useEffect(()=>{ const t = setTimeout(()=>{ setPage(0); load(); }, 400); return ()=>clearTimeout(t); },[search]);
+
+  const patch = async (id, fields) => {
+    await sb.from("applicants").update(fields).eq("id", id);
+    setApps(apps.map(a=>a.id===id?{...a,...fields}:a));
+  };
+
+  const doEmail = async (a, type) => {
+    const link = window.location.origin + window.location.pathname + "?steps=" + a.id;
+    const em = type==="nextSteps" ? EMAILS.nextSteps(a.name, link) : EMAILS[type](a.name);
+    const ok = await sendEmail(a.email, em.subject, em.body);
+    const log = [...(a.email_log||[]), { at:new Date().toISOString(), type, ok }];
+    const stageMap = { nextSteps:"Shortlisted", interview:"For Interview", regrets:"Rejected" };
+    await patch(a.id, { email_log: log, stage: stageMap[type]||a.stage });
+    loadCounts();
+    notify(ok ? `✉️ Email sent to ${a.name}` : `⚠️ Email proxy failed — check EMAIL_PROXY_URL (stage still updated)`);
+  };
+
+  const voiceUrl = (path) => sb.storage.from("voices").getPublicUrl(path).data.publicUrl;
+
+  return (
+    <div className="max-w-5xl mx-auto fade">
+      {toast && <div className="fixed top-4 right-4 card px-4 py-3 text-sm z-50">{toast}</div>}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-5">
+        {[["Total applicants",counts.total],["With experience",counts.withExp],["Voice done",counts.voice],["Assessment done",counts.assess],["For interview",counts.interview]].map(([l,v])=>(
+          <div key={l} className="card p-3"><p className="text-xs opacity-60">{l}</p><p className="text-2xl font-bold gold">{v}</p></div>
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-2 mb-4">
+        <input style={{width:"200px"}} placeholder="🔍 Search name or email" value={search} onChange={e=>setSearch(e.target.value)} />
+        <select style={{width:"auto"}} value={filterStage} onChange={e=>{setFilterStage(e.target.value);setPage(0);}}><option>All</option>{STAGES.map(s=><option key={s}>{s}</option>)}</select>
+        <select style={{width:"auto"}} value={filterExp} onChange={e=>{setFilterExp(e.target.value);setPage(0);}}><option value="All">All experience</option><option value="With">With experience</option><option value="Without">No experience</option></select>
+        <select style={{width:"auto"}} value={sort} onChange={e=>{setSort(e.target.value);setPage(0);}}><option value="ai">Sort: AI resume score</option><option value="assess">Sort: Assessment score</option><option value="new">Sort: Newest</option></select>
+      </div>
+      {loading && <p className="text-center opacity-60 py-6">Loading… 🌙</p>}
+      <div className="space-y-2">
+        {!loading && apps.length===0 && <div className="card p-8 text-center opacity-60">No applicants match. Share the apply link to get started! 🚀</div>}
+        {apps.map(a=>(
+          <div key={a.id} className="card p-4">
+            <div className="flex flex-wrap items-center gap-3 cursor-pointer" onClick={()=>setOpen(open===a.id?null:a.id)}>
+              <div className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm" style={{background:(stageColor[a.stage]||"#8f9bd4")+"33", color:stageColor[a.stage]||"#8f9bd4"}}>{(a.name||"?").split(" ").map(w=>w[0]).slice(0,2).join("")}</div>
+              <div className="flex-1 min-w-[150px]">
+                <p className="font-semibold text-sm">{a.name}</p>
+                <p className="text-xs opacity-60">{a.position} · {new Date(a.created_at).toLocaleDateString()}</p>
+              </div>
+              <Pill bg={stageColor[a.stage]||"#8f9bd4"}>{a.stage}</Pill>
+              {a.ai_category && <Pill bg={a.ai_category==="No Experience"?"#8f9bd4":"#4ade80"}>{a.ai_category}</Pill>}
+              <Pill bg="#a78bfa">AI {a.ai_score ?? "—"}</Pill>
+              {a.assessment && <Pill bg="#f5c542">Assessment {a.assessment.composite}</Pill>}
+              {a.voice_path && <Pill bg="#7dd3fc">🎙 {a.voice_rating ? a.voice_rating+"/5" : "unrated"}</Pill>}
+              <span className="text-xs opacity-40">{open===a.id?"▲":"▼"}</span>
+            </div>
+            {open===a.id && (
+              <div className="mt-4 pt-4 border-t border-white/10 space-y-4 fade">
+                <div className="grid md:grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <p className="text-xs opacity-50 uppercase mb-1">Contact</p>
+                    <p>{a.email}</p><p>{a.phone||"—"}</p>
+                    <p className="text-xs opacity-50 uppercase mt-3 mb-1">AI resume summary</p>
+                    <p className="opacity-90">{a.ai_summary||"—"}</p>
+                    {(a.ai_flags||[]).length>0 && <ul className="mt-1 text-xs opacity-70 list-disc ml-4">{a.ai_flags.map((f,i)=><li key={i}>{f}</li>)}</ul>}
+                    {a.resume_text && (
+                      <details className="mt-3">
+                        <summary className="text-xs opacity-60 cursor-pointer">📄 View full resume text</summary>
+                        <pre className="text-xs opacity-80 whitespace-pre-wrap mt-2 max-h-64 overflow-y-auto bg-black/30 rounded-lg p-3">{a.resume_text}</pre>
+                      </details>
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-xs opacity-50 uppercase mb-1">Voice recording</p>
+                    {a.voice_path ? (
+                      <div>
+                        <audio controls src={voiceUrl(a.voice_path)} className="w-full mb-2"></audio>
+                        <div className="flex gap-1 items-center">
+                          <span className="text-xs opacity-60 mr-1">Rate English:</span>
+                          {[1,2,3,4,5].map(s=>(
+                            <button key={s} onClick={()=>patch(a.id,{voice_rating:s})} className="text-lg" style={{opacity:(a.voice_rating||0)>=s?1:0.25}}>⭐</button>
+                          ))}
+                        </div>
+                      </div>
+                    ) : <p className="opacity-50 text-xs">Not yet submitted</p>}
+                    <p className="text-xs opacity-50 uppercase mt-3 mb-1">Assessment breakdown</p>
+                    {a.assessment ? (
+                      <div className="space-y-1">
+                        {Object.entries(a.assessment.breakdown).map(([c,v])=>(
+                          <div key={c} className="flex items-center gap-2 text-xs">
+                            <span className="w-20 capitalize opacity-70">{c}</span>
+                            <div className="flex-1 h-1.5 bg-black/40 rounded-full overflow-hidden"><div className="h-full bg-yellow-400" style={{width:v+"%"}}></div></div>
+                            <span className="w-8 text-right">{v}%</span>
+                          </div>
+                        ))}
+                        {Object.entries(a.assessment.writtenFeedback||{}).map(([id,fb])=>(
+                          <p key={id} className="text-xs opacity-60 mt-1">💬 {fb}</p>
+                        ))}
+                      </div>
+                    ) : <p className="opacity-50 text-xs">Not yet taken</p>}
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2 items-center">
+                  <select style={{width:"auto"}} value={a.stage} onChange={e=>{patch(a.id,{stage:e.target.value}); loadCounts();}}>{STAGES.map(s=><option key={s}>{s}</option>)}</select>
+                  <button className="btn2 text-xs" onClick={()=>doEmail(a,"nextSteps")}>✉️ Send voice + assessment link</button>
+                  <button className="btn2 text-xs" onClick={()=>doEmail(a,"interview")}>✉️ Invite to interview</button>
+                  <button className="btn2 text-xs" onClick={()=>doEmail(a,"regrets")}>✉️ Send regrets</button>
+                  <button className="btn2 text-xs" onClick={()=>{navigator.clipboard.writeText(window.location.origin+window.location.pathname+"?steps="+a.id); notify("Link copied!");}}>🔗 Copy their steps link</button>
+                  {(a.email_log||[]).length>0 && <span className="text-xs opacity-50">Last email: {a.email_log[a.email_log.length-1].type} · {new Date(a.email_log[a.email_log.length-1].at).toLocaleString()}</span>}
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+      <div className="flex justify-center items-center gap-3 mt-5">
+        <button className="btn2 text-xs" disabled={page===0} onClick={()=>setPage(page-1)}>← Prev</button>
+        <span className="text-xs opacity-60">Page {page+1}</span>
+        <button className="btn2 text-xs" disabled={apps.length<CONFIG.PAGE_SIZE} onClick={()=>setPage(page+1)}>Next →</button>
+      </div>
+    </div>
+  );
+}
+
+/* ============ ROOT ============ */
+function App() {
+  const params = new URLSearchParams(window.location.search);
+  const stepsId = params.get("steps");
+  const [view, setView] = useState(stepsId ? "steps" : "apply");
+  const [authed, setAuthed] = useState(false);
+  const [pw, setPw] = useState("");
+  const [submitted, setSubmitted] = useState(null);
+
+  return (
+    <div className="min-h-screen p-4 md:p-8">
+      <header className="max-w-5xl mx-auto flex justify-between items-center mb-8">
+        <div className="flex items-center gap-3">
+          <span className="text-3xl">🌙</span>
+          <div>
+            <h1 className="text-xl font-bold gold">Bayani Recruits</h1>
+            <p className="text-xs opacity-60">{CONFIG.COMPANY} · Applicant Hub</p>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <button className={view==="apply"?"btn text-sm":"btn2 text-sm"} onClick={()=>setView("apply")}>Apply</button>
+          <button className={view==="admin"?"btn text-sm":"btn2 text-sm"} onClick={()=>setView("admin")}>Admin</button>
+        </div>
+      </header>
+      {view==="apply" && !submitted && <ApplyForm onDone={setSubmitted} />}
+      {view==="apply" && submitted && (
+        <div className="max-w-xl mx-auto card p-8 text-center fade">
+          <p className="text-4xl mb-3">🎉</p>
+          <h2 className="text-lg font-bold">Salamat, {submitted.name.split(" ")[0]}!</h2>
+          <p className="text-sm opacity-70 mt-2">Your application has been received. Check your email for confirmation — if shortlisted, you'll get a link for the voice recording and assessment within 2-3 business days.</p>
+        </div>
+      )}
+      {view==="steps" && <NextSteps id={stepsId} />}
+      {view==="admin" && !authed && (
+        <div className="max-w-sm mx-auto card p-6 fade">
+          <h2 className="font-bold gold mb-3">Admin login</h2>
+          <input type="password" placeholder="Password" value={pw} onChange={e=>setPw(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&pw===CONFIG.ADMIN_PASSWORD)setAuthed(true);}} />
+          <button className="btn w-full mt-3" onClick={()=>{ if(pw===CONFIG.ADMIN_PASSWORD) setAuthed(true); else alert("Wrong password, partner 😅"); }}>Login</button>
+        </div>
+      )}
+      {view==="admin" && authed && <Admin />}
+      <footer className="text-center text-xs opacity-30 mt-12">Bayani Recruits · built for the night shift heroes 🌙</footer>
+    </div>
+  );
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
