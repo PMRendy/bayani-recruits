@@ -162,8 +162,25 @@ async function sendEmail(to, subject, body) {
 }
 const EMAILS = {
   received: n => ({
-    subject: `Application received — ${CONFIG.COMPANY}`,
-    body: `Hi ${n},\n\nThank you for applying to ${CONFIG.COMPANY}! We've received your application and our team is reviewing it now.\n\nIf shortlisted, you'll receive a link for the next steps (voice recording + online assessment) within 2-3 business days.\n\nSalamat at good luck!\n\n${CONFIG.FROM_NAME}`
+    subject: `We got your application! 🌙 — ${CONFIG.COMPANY}`,
+    body: `Hi ${n},
+
+Salamat for applying to ${CONFIG.COMPANY} — your application has been received and is now in review.
+
+Here's what happens next:
+
+1. REVIEW — our team (with a little help from AI) reviews your resume within 2-3 business days.
+2. NEXT STEPS — if shortlisted, you'll receive a link to complete a short voice recording and a 20-minute online assessment. Watch your inbox (and spam folder, just in case!).
+3. INTERVIEW — top candidates get invited to a final interview with our team.
+
+If you don't hear from us within 3 business days, pasensya na — it means we're processing a large number of applicants. If after one week you're still determined to be part of the team, you may email us again with the subject line "URGENT" and we'll take another look at your application.
+
+A quick tip: our clients are US-based and our team works the night shift — our "Bayani" are the heroes of the graveyard hours. If that's you, we can't wait to meet you.
+
+No need to reply to this email for now. Good luck!
+
+— ${CONFIG.FROM_NAME}
+rendy@smb-vs.com`
   }),
   nextSteps: (n, link) => ({
     subject: `Next steps: Voice recording & assessment — ${CONFIG.COMPANY}`,
