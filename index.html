@@ -120,31 +120,78 @@ async function extractPdfText(file) {
 
 // Keyword rules — dagdagan/bawasan mo lang dito para i-tune ang scoring
 const SCREEN_RULES = {
-  vaBpo: ["virtual assistant"," va ","bpo","call center","call centre","customer service","customer support","csr","tsr","telemarket","appointment sett","cold call","inbound","outbound","healthcare account","medical va","executive assistant","ecommerce va","amazon va"],
-  bonus: ["night shift","graveyard","us client","us-based","us based","eastern time","est ","pst ","healthcare","medical billing","insurance verification","slack","clickup","asana","trello","salesforce","hubspot","zendesk","crm","data entry","quickbooks","calendar management","email management","cold email","lead generation"],
+  vaBpo: ["virtual assistant"," va ","bpo","call center","call centre","customer service","customer support","csr","tsr","telemarket","appointment sett","cold call","inbound","outbound","healthcare account","medical va","executive assistant","ecommerce va","amazon va","chat support","email support"],
+  transferable: ["sales","account manag","admin assist","administrative","office assist","receptionist","secretary","teacher","tutor","nurse","nursing","caregiver","medical","clinic","pharmacy","hotel","hospitality","front desk","cashier","team lead","supervisor","manager","coordinator","hr ","human resource","recruit","bookkeep","accounting","billing","collections","technical support","it support","help desk","encoder","clerk","freelance","upwork","onlinejobs","fiverr"],
+  bonus: ["night shift","graveyard","us client","us-based","us based","eastern time","est ","pst ","healthcare","medical billing","insurance verification","slack","clickup","asana","trello","salesforce","hubspot","zendesk","crm","data entry","quickbooks","calendar management","email management","cold email","lead generation","google workspace","microsoft office","excel","canva","shopify","wordpress"],
+  eduSignals: ["bachelor","bs ","ba ","college","university","graduate","degree","course","certificate","certification","training"],
   anyWork: ["experience","employed","worked at","work history","company","position","responsibilities","duties","intern"],
 };
+// Common job title words para mahagilap ang work history lines
+const TITLE_WORDS = ["assistant","representative","specialist","agent","associate","officer","coordinator","manager","supervisor","lead","analyst","support","staff","clerk","encoder","teacher","tutor","nurse","cashier","freelancer","consultant","intern","developer","designer","admin","secretary","receptionist"];
+
 function analyzeResume(text, expText) {
-  const t = (" " + (text || "") + " " + (expText || "") + " ").toLowerCase();
+  const raw = (text || "") + "\n" + (expText || "");
+  const t = (" " + raw + " ").toLowerCase();
   const vaHits = SCREEN_RULES.vaBpo.filter(k => t.includes(k));
+  const transferHits = SCREEN_RULES.transferable.filter(k => t.includes(k));
   const bonusHits = SCREEN_RULES.bonus.filter(k => t.includes(k));
+  const eduHits = SCREEN_RULES.eduSignals.filter(k => t.includes(k));
   const hasWork = SCREEN_RULES.anyWork.some(k => t.includes(k));
-  const yearMatches = (t.match(/20[0-2][0-9]/g) || []).length;
+
+  // Hulaan ang years of experience mula sa year ranges (e.g. 2019-2023, 2021 to present)
+  let expYears = 0;
+  const ranges = raw.match(/(20[0-2][0-9])\s*(?:-|–|to)\s*(20[0-2][0-9]|present|current|now)/gi) || [];
+  const thisYear = new Date().getFullYear();
+  for (const r of ranges) {
+    const m = r.match(/(20[0-2][0-9])\s*(?:-|–|to)\s*(20[0-2][0-9]|present|current|now)/i);
+    if (m) {
+      const from = parseInt(m[1]);
+      const to = /present|current|now/i.test(m[2]) ? thisYear : parseInt(m[2]);
+      if (to >= from && to - from < 30) expYears += (to - from);
+    }
+  }
+  expYears = Math.min(expYears, 25);
+
+  // Hagilapin ang mukhang job-title/work-history lines para sa Experience snapshot
+  const lines = raw.split(/\n|(?=\s{3,})/).map(s => s.trim()).filter(s => s.length > 5 && s.length < 120);
+  const roleLines = [];
+  for (const line of lines) {
+    const l = line.toLowerCase();
+    const hasTitle = TITLE_WORDS.some(w => l.includes(w));
+    const hasYear = /20[0-2][0-9]/.test(line);
+    if (hasTitle && (hasYear || roleLines.length < 3)) {
+      if (!roleLines.some(x => x.toLowerCase() === l)) roleLines.push(line);
+    }
+    if (roleLines.length >= 6) break;
+  }
+
+  // Scoring: VA/BPO pinakamataas, pero may kabuhayan din ang transferable experience
   let score = 10;
-  score += Math.min(vaHits.length * 12, 48);
-  score += Math.min(bonusHits.length * 4, 28);
-  if (hasWork) score += 8;
-  score += Math.min(yearMatches, 6);
+  score += Math.min(vaHits.length * 12, 44);
+  score += Math.min(transferHits.length * 5, 20);
+  score += Math.min(bonusHits.length * 3, 18);
+  score += Math.min(expYears * 2, 12);
+  if (eduHits.length) score += 3;
+  if (hasWork) score += 3;
   score = Math.min(Math.round(score), 100);
+
   let category = "No Experience";
   if (vaHits.length > 0) category = "With VA/BPO Experience";
-  else if (hasWork) category = "With Other Work Experience";
+  else if (transferHits.length > 0 || hasWork) category = "With Other Work Experience";
+
   const flags = [];
-  if (vaHits.length) flags.push("VA/BPO signals: " + vaHits.slice(0, 4).map(s=>s.trim()).join(", "));
-  if (bonusHits.length) flags.push("Priority skills: " + bonusHits.slice(0, 5).map(s=>s.trim()).join(", "));
+  if (roleLines.length) flags.push("Roles found: " + roleLines.slice(0, 4).join(" | "));
+  if (vaHits.length) flags.push("VA/BPO signals: " + vaHits.slice(0, 4).map(s => s.trim()).join(", "));
+  if (transferHits.length) flags.push("Transferable: " + transferHits.slice(0, 5).map(s => s.trim()).join(", "));
+  if (bonusHits.length) flags.push("Priority skills: " + bonusHits.slice(0, 5).map(s => s.trim()).join(", "));
   if (!text && expText) flags.push("No resume attached — self-described only");
   if ((text || "").length < 300 && text) flags.push("Very short resume — verify");
-  const summary = category + " · matched " + vaHits.length + " VA/BPO keyword(s) and " + bonusHits.length + " priority skill(s). Keyword-based screen — open the full resume text below to verify.";
+
+  const summary = category
+    + (expYears ? " · ~" + expYears + " yr(s) est. experience" : "")
+    + " · " + vaHits.length + " VA/BPO, " + transferHits.length + " transferable, " + bonusHits.length + " priority skill match(es)."
+    + " Keyword-based screen — open the full resume text below to verify.";
+
   return { score, category, summary, flags };
 }
 function scoreWrittenLocal(answer, minWords) {
