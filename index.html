@@ -8,6 +8,7 @@
 <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
 <style>
   body { background:#0d1226; color:#e8eaf6; font-family: ui-sans-serif, system-ui, sans-serif; }
   .card { background:#161c38; border:1px solid #262e55; border-radius:14px; }
@@ -100,6 +101,62 @@ async function changeAdminPw() {
   const { error } = await sb.from('settings').upsert({ key: 'admin_pw_hash', value: hash });
   if (error) alert('Failed to save — did you run the settings SQL? (' + error.message + ')');
   else alert('✅ Password changed! Use the new password on your next login.');
+}
+
+
+/* ===== Free in-browser resume extraction + rule-based screening ===== */
+async function extractPdfText(file) {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
+  let text = "";
+  for (let p = 1; p <= pdf.numPages; p++) {
+    const page = await pdf.getPage(p);
+    const content = await page.getTextContent();
+    text += content.items.map(i => i.str).join(" ") + "\n";
+  }
+  return text.replace(/[ \t]+/g, " ").trim();
+}
+
+// Keyword rules — dagdagan/bawasan mo lang dito para i-tune ang scoring
+const SCREEN_RULES = {
+  vaBpo: ["virtual assistant"," va ","bpo","call center","call centre","customer service","customer support","csr","tsr","telemarket","appointment sett","cold call","inbound","outbound","healthcare account","medical va","executive assistant","ecommerce va","amazon va"],
+  bonus: ["night shift","graveyard","us client","us-based","us based","eastern time","est ","pst ","healthcare","medical billing","insurance verification","slack","clickup","asana","trello","salesforce","hubspot","zendesk","crm","data entry","quickbooks","calendar management","email management","cold email","lead generation"],
+  anyWork: ["experience","employed","worked at","work history","company","position","responsibilities","duties","intern"],
+};
+function analyzeResume(text, expText) {
+  const t = (" " + (text || "") + " " + (expText || "") + " ").toLowerCase();
+  const vaHits = SCREEN_RULES.vaBpo.filter(k => t.includes(k));
+  const bonusHits = SCREEN_RULES.bonus.filter(k => t.includes(k));
+  const hasWork = SCREEN_RULES.anyWork.some(k => t.includes(k));
+  const yearMatches = (t.match(/20[0-2][0-9]/g) || []).length;
+  let score = 10;
+  score += Math.min(vaHits.length * 12, 48);
+  score += Math.min(bonusHits.length * 4, 28);
+  if (hasWork) score += 8;
+  score += Math.min(yearMatches, 6);
+  score = Math.min(Math.round(score), 100);
+  let category = "No Experience";
+  if (vaHits.length > 0) category = "With VA/BPO Experience";
+  else if (hasWork) category = "With Other Work Experience";
+  const flags = [];
+  if (vaHits.length) flags.push("VA/BPO signals: " + vaHits.slice(0, 4).map(s=>s.trim()).join(", "));
+  if (bonusHits.length) flags.push("Priority skills: " + bonusHits.slice(0, 5).map(s=>s.trim()).join(", "));
+  if (!text && expText) flags.push("No resume attached — self-described only");
+  if ((text || "").length < 300 && text) flags.push("Very short resume — verify");
+  const summary = category + " · matched " + vaHits.length + " VA/BPO keyword(s) and " + bonusHits.length + " priority skill(s). Keyword-based screen — open the full resume text below to verify.";
+  return { score, category, summary, flags };
+}
+function scoreWrittenLocal(answer, minWords) {
+  const a = (answer || "").trim();
+  if (!a) return 0;
+  const words = a.split(/\s+/).length;
+  let s = 3;
+  s += Math.min(words / (minWords || 20) * 3, 4);
+  if (/^[A-Z]/.test(a)) s += 1;
+  if (/[.!?]$/.test(a)) s += 1;
+  if (words >= 15 && /,/.test(a)) s += 1;
+  return Math.min(Math.round(s * 10) / 10, 10);
 }
 
 async function askClaude(prompt, maxTokens = 1000, pdfB64 = null) {
@@ -390,14 +447,24 @@ function ApplyForm({
       resume_text: f.expText || ""
     };
     try {
-      const prompt = `You are screening applicants for a Philippines-based virtual assistant company serving US clients on overnight shifts. ${pdfB64 ? "First, extract the FULL text content of the attached resume PDF." : ""} Then analyze the applicant. Respond ONLY with JSON (no markdown, no backticks): {"resume_text": "${pdfB64 ? "full extracted resume text, cleaned up" : "empty string"}", "score": 0-100, "category": "With VA/BPO Experience" | "With Other Work Experience" | "No Experience", "summary": "2 sentence summary of their background", "flags": ["notable strengths or concerns, max 4"]}. Score higher for: VA/BPO/call center experience, healthcare or finance accounts, night shift experience, US client exposure, tools like Slack/ClickUp/CRMs, tenure and stability.${f.expText ? " Applicant's own notes: " + f.expText : ""}`;
-      const res = await askClaude(prompt, 3000, pdfB64);
-      const parsed = parseJSON(res);
-      if (parsed) ai = {
-        ...ai,
-        ...parsed
-      };
-    } catch (e) {/* AI failure shouldn't block application */}
+      let resumeText = "";
+      if (pdfB64) {
+        const bin = atob(pdfB64);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
+        const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
+        for (let p = 1; p <= pdf.numPages; p++) {
+          const page = await pdf.getPage(p);
+          const content = await page.getTextContent();
+          resumeText += content.items.map(i => i.str).join(" ") + "\n";
+        }
+        resumeText = resumeText.replace(/[ \t]+/g, " ").trim();
+      }
+      const result = analyzeResume(resumeText, f.expText);
+      ai = { ...result, resume_text: resumeText || f.expText || "" };
+      if (pdfB64 && !resumeText) ai.flags = [...(ai.flags||[]), "PDF may be image-based/scanned — text not extractable, review manually"];
+    } catch (e) {/* extraction failure shouldn't block application */}
     const {
       data: row,
       error
@@ -762,13 +829,12 @@ function AssessmentStep({
         if (answers[question.id] === question.correct) cats[question.cat].got += 1;
       }
     }
-    let writtenScores = {};
-    try {
-      const prompt = `Score these applicant written answers for a VA company. For each, give 0-10 based on: English grammar/clarity (half weight) and quality/professionalism/sincerity of content (half weight). Respond ONLY with JSON, no markdown: {"scores": {"id": number, ...}, "feedback": {"id": "1 sentence", ...}}\n\n` + writtenQs.map(w => `ID: ${w.id}\nQuestion: ${w.q}\nAnswer: ${answers[w.id] || "(blank)"}`).join("\n\n");
-      const res = await askClaude(prompt, 800);
-      const parsed = parseJSON(res);
-      if (parsed && parsed.scores) writtenScores = parsed;
-    } catch (e) {}
+    let writtenScores = { scores: {}, feedback: {} };
+    for (const w of writtenQs) {
+      const sc = scoreWrittenLocal(answers[w.id], 25);
+      writtenScores.scores[w.id] = sc;
+      writtenScores.feedback[w.id] = w.id + ": auto-scored " + sc + "/10 (length & structure heuristic — basahin ang sagot sa admin para sa final judgment)";
+    }
     for (const w of writtenQs) {
       const s = writtenScores.scores && typeof writtenScores.scores[w.id] === "number" ? writtenScores.scores[w.id] / 10 : 0.5;
       cats[w.cat].max += 1;
