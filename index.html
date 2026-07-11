@@ -89,6 +89,16 @@ async function verifyAdmin(pw) {
   return pw === CONFIG.ADMIN_PASSWORD; // fallback: default password kung wala pang na-save
 }
 
+
+async function deleteApplicant(a, afterDone) {
+  const sure = prompt('⚠️ PERMANENT DELETE for "' + a.name + '" — kasama ang voice recording at assessment. Type DELETE to confirm:');
+  if (sure !== "DELETE") return;
+  if (a.voice_path) { try { await sb.storage.from("voices").remove([a.voice_path]); } catch (e) {} }
+  const { error } = await sb.from("applicants").delete().eq("id", a.id);
+  if (error) alert("Delete failed: " + error.message + " — baka kailangan pa i-run yung delete policy SQL.");
+  else afterDone();
+}
+
 async function reScreenAll() {
   if (!confirm("Re-screen ALL applicants using the current keyword rules? This updates scores, categories, and summaries.")) return;
   let from = 0, total = 0;
@@ -1083,6 +1093,7 @@ function Admin() {
     interview: 0
   });
   const [filterStage, setFilterStage] = useState("All");
+  const [quick, setQuick] = useState(null);
   const [filterExp, setFilterExp] = useState("All");
   const [sort, setSort] = useState("ai");
   const [search, setSearch] = useState("");
@@ -1126,6 +1137,8 @@ function Admin() {
     if (filterStage !== "All") q = q.eq("stage", filterStage);
     if (filterExp === "With") q = q.neq("ai_category", "No Experience");
     if (filterExp === "Without") q = q.eq("ai_category", "No Experience");
+    if (quick === "voice") q = q.not("voice_path", "is", null);
+    if (quick === "assess") q = q.not("assessment", "is", null);
     if (search) q = q.or(`name.ilike.%${search}%,email.ilike.%${search}%`);
     if (sort === "ai") q = q.order("ai_score", {
       ascending: false,
@@ -1151,7 +1164,7 @@ function Admin() {
   }, []);
   useEffect(() => {
     load();
-  }, [filterStage, filterExp, sort, page]);
+  }, [filterStage, filterExp, sort, page, quick]);
   useEffect(() => {
     const t = setTimeout(() => {
       setPage(0);
@@ -1195,8 +1208,16 @@ function Admin() {
       children: toast
     }, void 0, false), /*#__PURE__*/_jsxDEV("div", {
       className: "grid grid-cols-2 md:grid-cols-5 gap-3 mb-5",
-      children: [["Total applicants", counts.total], ["With experience", counts.withExp], ["Voice done", counts.voice], ["Assessment done", counts.assess], ["For interview", counts.interview]].map(([l, v]) => /*#__PURE__*/_jsxDEV("div", {
-        className: "card p-3",
+      children: [
+        ["Total applicants", counts.total, () => { setFilterStage("All"); setFilterExp("All"); setQuick(null); setPage(0); }, filterStage === "All" && filterExp === "All" && !quick],
+        ["With experience", counts.withExp, () => { setFilterStage("All"); setFilterExp("With"); setQuick(null); setPage(0); }, filterExp === "With" && !quick],
+        ["Voice done", counts.voice, () => { setFilterStage("All"); setFilterExp("All"); setQuick("voice"); setPage(0); }, quick === "voice"],
+        ["Assessment done", counts.assess, () => { setFilterStage("All"); setFilterExp("All"); setQuick("assess"); setPage(0); }, quick === "assess"],
+        ["For interview", counts.interview, () => { setFilterStage("For Interview"); setFilterExp("All"); setQuick(null); setPage(0); }, filterStage === "For Interview"]
+      ].map(([l, v, go, active]) => /*#__PURE__*/_jsxDEV("div", {
+        className: "card p-3 cursor-pointer transition hover:brightness-125",
+        style: active ? { borderColor: "#f5c542" } : {},
+        onClick: go,
         children: [/*#__PURE__*/_jsxDEV("p", {
           className: "text-xs opacity-60",
           children: l
@@ -1221,6 +1242,7 @@ function Admin() {
         value: filterStage,
         onChange: e => {
           setFilterStage(e.target.value);
+          setQuick(null);
           setPage(0);
         },
         children: [/*#__PURE__*/_jsxDEV("option", {
@@ -1442,7 +1464,7 @@ function Admin() {
                 notify("Link copied!");
               },
               children: "🔗 Copy their steps link"
-            }, void 0, false), (a.email_log || []).length > 0 && /*#__PURE__*/_jsxDEV("span", {
+            }, void 0, false), /*#__PURE__*/_jsxDEV("button", { className: "btn2 text-xs", style: { color: "#f87171", borderColor: "#f8717155" }, onClick: () => deleteApplicant(a, () => { notify("🗑 Deleted " + a.name); load(); loadCounts(); }), children: "🗑 Delete" }, void 0, false), (a.email_log || []).length > 0 && /*#__PURE__*/_jsxDEV("span", {
               className: "text-xs opacity-50",
               children: ["Last email: ", a.email_log[a.email_log.length - 1].type, " · ", new Date(a.email_log[a.email_log.length - 1].at).toLocaleString()]
             }, void 0, true)]
