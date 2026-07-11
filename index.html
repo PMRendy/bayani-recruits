@@ -88,6 +88,26 @@ async function verifyAdmin(pw) {
   } catch (e) {}
   return pw === CONFIG.ADMIN_PASSWORD; // fallback: default password kung wala pang na-save
 }
+
+async function reScreenAll() {
+  if (!confirm("Re-screen ALL applicants using the current keyword rules? This updates scores, categories, and summaries.")) return;
+  let from = 0, total = 0;
+  while (true) {
+    const { data, error } = await sb.from("applicants").select("id, resume_text, exp_text").range(from, from + 199);
+    if (error) { alert("Load failed: " + error.message); return; }
+    if (!data || !data.length) break;
+    for (const a of data) {
+      const r = analyzeResume(a.resume_text || "", a.exp_text || "");
+      await sb.from("applicants").update({ ai_score: r.score, ai_category: r.category, ai_summary: r.summary, ai_flags: r.flags }).eq("id", a.id);
+      total++;
+    }
+    if (data.length < 200) break;
+    from += 200;
+  }
+  alert("✅ Re-screened " + total + " applicant(s)! Refreshing…");
+  window.location.reload();
+}
+
 async function changeAdminPw() {
   const cur = prompt('Current password:');
   if (cur === null) return;
@@ -291,8 +311,49 @@ rendy@smb-vs.com`
     body: `Hi ${n},\n\nGood news — you've been shortlisted! Please complete the next steps here:\n\n${link}\n\nThis includes a short voice recording and an online assessment (about 20-25 minutes). Please complete it within 48 hours.\n\n${CONFIG.FROM_NAME}`
   }),
   interview: n => ({
-    subject: `Interview invitation — ${CONFIG.COMPANY}`,
-    body: `Hi ${n},\n\nCongratulations! We'd love to invite you to a final interview. Please reply to this email with your availability this week (evenings PHT preferred).\n\nLooking forward to meeting you!\n\n${CONFIG.FROM_NAME}`
+    subject: `Congratulations! Shadowing Session & Final Interview Invitation — ${CONFIG.COMPANY}`,
+    body: `Hi ${n},
+
+Congratulations — you've made it to the final stage! We'd like to invite you to a SHADOWING SESSION at our office, where your final interview will also take place.
+
+WHAT IS A SHADOWING SESSION?
+This is your chance to see the actual work with your own eyes, meet the people you'll be working with, and see the workplace — before any final commitment. It normally runs for 1 whole shift.
+
+Are you available for a full shift? If not, no worries — we can do a minimum of 4 hours starting at 9:00 PM instead.
+
+SCHEDULE: Shadowing sessions are held on Tuesdays, Wednesdays, and Thursdays only.
+
+LOCATION:
+SMB Virtual Staffing Office
+Purok 1, San Isidro, Subic
+Landmark: Hanging Bridge, after Apo Golf Resort
+Map: https://maps.app.goo.gl/gtgGRNHN4qcURnzH7
+
+Your final interview will be conducted during this session.
+
+Please reply to this email with:
+1. Your preferred day (Tue/Wed/Thu) and date
+2. Whether you can do a full shift or the 4-hour option (9:00 PM start)
+
+Looking forward to meeting you in person!
+
+— ${CONFIG.FROM_NAME}
+rendy@smb-vs.com`
+  }),
+  thankYou: n => ({
+    subject: `Thank you for completing your shadowing & interview session! — ${CONFIG.COMPANY}`,
+    body: `Hi ${n},
+
+Thank you for completing your shadowing session and final interview with us! We hope you enjoyed seeing the work up close and meeting the team — the same Bayani you might soon be working alongside.
+
+Our team is now finalizing the evaluation. You will receive your results within one week at the latest.
+
+Whatever the outcome, we appreciate the time, effort, and energy you invested throughout this process.
+
+Salamat, and talk soon!
+
+— ${CONFIG.FROM_NAME}
+rendy@smb-vs.com`
   }),
   regrets: n => ({
     subject: `Update on your application — ${CONFIG.COMPANY}`,
@@ -423,12 +484,13 @@ const WEIGHTS = {
   culture: 10
 };
 const VOICE_SCRIPT = `Good evening! My name is [your name], and I'm applying to join the SMB Virtual Staffing team. I have experience handling client communications, and I'm comfortable working the night shift. In my previous role, I learned that clear communication and reliability are the most important parts of remote work. Thank you for considering my application — I look forward to speaking with you soon.`;
-const STAGES = ["Applied", "Shortlisted", "Voice/Assessment", "For Interview", "Hired", "Rejected"];
+const STAGES = ["Applied", "Shortlisted", "Voice/Assessment", "For Interview", "Hire in the Future", "Hired", "Rejected"];
 const stageColor = {
   "Applied": "#8f9bd4",
   "Shortlisted": "#f5c542",
   "Voice/Assessment": "#7dd3fc",
   "For Interview": "#a78bfa",
+  "Hire in the Future": "#fb923c",
   "Hired": "#4ade80",
   "Rejected": "#f87171"
 };
@@ -446,6 +508,36 @@ const Pill = ({
 }, void 0, false);
 
 /* ============ APPLICANT: APPLICATION FORM ============ */
+
+function AnswersViewer({ a }) {
+  const e = React.createElement;
+  const answers = (a.assessment && a.assessment.answers) || {};
+  return e("details", { className: "mt-2" },
+    e("summary", { className: "text-xs opacity-60 cursor-pointer", style: { color: "#f5c542" } }, "📝 View all answers (" + ASSESSMENT.length + " questions)"),
+    e("div", { className: "mt-2 space-y-3 max-h-80 overflow-y-auto bg-black/30 rounded-lg p-3" },
+      ASSESSMENT.map((q, qi) => {
+        const ans = answers[q.id];
+        let answerNode;
+        if (q.type === "mcq") {
+          const picked = (typeof ans === "number") ? q.opts[ans] : "(no answer)";
+          const isCorrect = ans === q.correct;
+          answerNode = e("div", null,
+            e("p", { className: "text-xs", style: { color: isCorrect ? "#4ade80" : "#f87171" } },
+              (isCorrect ? "✓ " : "✗ ") + picked),
+            !isCorrect && e("p", { className: "text-xs opacity-50" }, "Correct: " + q.opts[q.correct])
+          );
+        } else {
+          answerNode = e("p", { className: "text-xs opacity-90 whitespace-pre-wrap italic" }, ans ? '"' + ans + '"' : "(no answer)");
+        }
+        return e("div", { key: q.id, className: "border-b border-white/10 pb-2" },
+          e("p", { className: "text-xs opacity-60" }, "Q" + (qi + 1) + " · " + q.cat.toUpperCase() + " — " + q.q),
+          answerNode
+        );
+      })
+    )
+  );
+}
+
 function ApplyForm({
   onDone
 }) {
@@ -1174,7 +1266,7 @@ function Admin() {
           value: "new",
           children: "Sort: Newest"
         }, void 0, false)]
-      }, void 0, true), /*#__PURE__*/_jsxDEV("button", { className: "btn2 text-xs", style: { marginLeft: "auto" }, onClick: () => changeAdminPw(), children: "🔑 Change password" }, void 0, false)]
+      }, void 0, true), /*#__PURE__*/_jsxDEV("button", { className: "btn2 text-xs", style: { marginLeft: "auto" }, onClick: () => reScreenAll(), children: "🔄 Re-screen all" }, void 0, false), /*#__PURE__*/_jsxDEV("button", { className: "btn2 text-xs", onClick: () => changeAdminPw(), children: "🔑 Change password" }, void 0, false)]
     }, void 0, true), loading && /*#__PURE__*/_jsxDEV("p", {
       className: "text-center opacity-60 py-6",
       children: "Loading… 🌙"
@@ -1309,7 +1401,7 @@ function Admin() {
                 }, c, true)), Object.entries(a.assessment.writtenFeedback || {}).map(([id, fb]) => /*#__PURE__*/_jsxDEV("p", {
                   className: "text-xs opacity-60 mt-1",
                   children: ["💬 ", fb]
-                }, id, true))]
+                }, id, true)), /*#__PURE__*/_jsxDEV(AnswersViewer, { a: a }, void 0, false)]
               }, void 0, true) : /*#__PURE__*/_jsxDEV("p", {
                 className: "opacity-50 text-xs",
                 children: "Not yet taken"
@@ -1338,8 +1430,8 @@ function Admin() {
             }, void 0, false), /*#__PURE__*/_jsxDEV("button", {
               className: "btn2 text-xs",
               onClick: () => doEmail(a, "interview"),
-              children: "✉️ Invite to interview"
-            }, void 0, false), /*#__PURE__*/_jsxDEV("button", {
+              children: "✉️ Invite to shadowing + interview"
+            }, void 0, false), /*#__PURE__*/_jsxDEV("button", { className: "btn2 text-xs", onClick: () => doEmail(a, "thankYou"), children: "✉️ Thank you (after shadowing)" }, void 0, false), /*#__PURE__*/_jsxDEV("button", {
               className: "btn2 text-xs",
               onClick: () => doEmail(a, "regrets"),
               children: "✉️ Send regrets"
