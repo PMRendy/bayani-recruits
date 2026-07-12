@@ -556,7 +556,9 @@ function ApplyForm({
     email: "",
     phone: "",
     position: "General VA",
-    expText: ""
+    expText: "",
+    address: "",
+    relocate: false
   });
   const [pdfB64, setPdfB64] = useState(null);
   const [resumeName, setResumeName] = useState("");
@@ -621,6 +623,8 @@ function ApplyForm({
       name: f.name.trim(),
       email: f.email.trim(),
       phone: f.phone.trim(),
+      address: f.address.trim(),
+      relocate: f.relocate,
       position: f.position,
       resume_text: ai.resume_text || f.expText || "",
       exp_text: f.expText,
@@ -680,7 +684,25 @@ function ApplyForm({
           ...f,
           phone: e.target.value
         })
-      }, void 0, false), /*#__PURE__*/_jsxDEV("select", {
+      }, void 0, false), /*#__PURE__*/_jsxDEV("input", {
+        placeholder: "Home address (Barangay, City/Municipality, Province)",
+        value: f.address,
+        onChange: e => setF({ ...f, address: e.target.value })
+      }, void 0, false), /*#__PURE__*/_jsxDEV("div", {
+        className: "bg-black/30 rounded-xl p-3 border border-yellow-500/20",
+        children: [/*#__PURE__*/_jsxDEV("p", {
+          className: "text-xs gold font-semibold mb-1",
+          children: "📍 Office location: San Isidro, Subic, Zambales"
+        }, void 0, false), /*#__PURE__*/_jsxDEV("label", {
+          className: "flex items-center gap-2 text-sm cursor-pointer",
+          children: [/*#__PURE__*/_jsxDEV("input", {
+            type: "checkbox",
+            style: { width: "auto" },
+            checked: f.relocate,
+            onChange: e => setF({ ...f, relocate: e.target.checked })
+          }, void 0, false), "I am willing to relocate / commute to the office area if needed"]
+        }, void 0, true)]
+      }, void 0, true), /*#__PURE__*/_jsxDEV("select", {
         value: f.position,
         onChange: e => setF({
           ...f,
@@ -1110,7 +1132,7 @@ function Admin() {
       count: "exact",
       head: true
     });
-    const [t, v, a, iv, we] = await Promise.all([q(), sb.from("applicants").select("id", {
+    const [t, v, a, iv, we, hi] = await Promise.all([q(), sb.from("applicants").select("id", {
       count: "exact",
       head: true
     }).not("voice_path", "is", null), sb.from("applicants").select("id", {
@@ -1122,13 +1144,17 @@ function Admin() {
     }).eq("stage", "For Interview"), sb.from("applicants").select("id", {
       count: "exact",
       head: true
-    }).neq("ai_category", "No Experience")]);
+    }).neq("ai_category", "No Experience"), sb.from("applicants").select("id", {
+      count: "exact",
+      head: true
+    }).eq("stage", "Hired")]);
     setCounts({
       total: t.count || 0,
       voice: v.count || 0,
       assess: a.count || 0,
       interview: iv.count || 0,
-      withExp: we.count || 0
+      withExp: we.count || 0,
+      hired: hi.count || 0
     });
   };
   const load = async () => {
@@ -1139,7 +1165,7 @@ function Admin() {
     if (filterExp === "Without") q = q.eq("ai_category", "No Experience");
     if (quick === "voice") q = q.not("voice_path", "is", null);
     if (quick === "assess") q = q.not("assessment", "is", null);
-    if (search) q = q.or(`name.ilike.%${search}%,email.ilike.%${search}%`);
+    if (search) q = q.or(`name.ilike.%${search}%,email.ilike.%${search}%,address.ilike.%${search}%`);
     if (sort === "ai") q = q.order("ai_score", {
       ascending: false,
       nullsFirst: false
@@ -1207,13 +1233,14 @@ function Admin() {
       className: "fixed top-4 right-4 card px-4 py-3 text-sm z-50",
       children: toast
     }, void 0, false), /*#__PURE__*/_jsxDEV("div", {
-      className: "grid grid-cols-2 md:grid-cols-5 gap-3 mb-5",
+      className: "grid grid-cols-2 md:grid-cols-6 gap-3 mb-5",
       children: [
         ["Total applicants", counts.total, () => { setFilterStage("All"); setFilterExp("All"); setQuick(null); setPage(0); }, filterStage === "All" && filterExp === "All" && !quick],
         ["With experience", counts.withExp, () => { setFilterStage("All"); setFilterExp("With"); setQuick(null); setPage(0); }, filterExp === "With" && !quick],
         ["Voice done", counts.voice, () => { setFilterStage("All"); setFilterExp("All"); setQuick("voice"); setPage(0); }, quick === "voice"],
         ["Assessment done", counts.assess, () => { setFilterStage("All"); setFilterExp("All"); setQuick("assess"); setPage(0); }, quick === "assess"],
-        ["For interview", counts.interview, () => { setFilterStage("For Interview"); setFilterExp("All"); setQuick(null); setPage(0); }, filterStage === "For Interview"]
+        ["For interview", counts.interview, () => { setFilterStage("For Interview"); setFilterExp("All"); setQuick(null); setPage(0); }, filterStage === "For Interview"],
+        ["✅ Hired", counts.hired, () => { setFilterStage("Hired"); setFilterExp("All"); setQuick(null); setPage(0); }, filterStage === "Hired"]
       ].map(([l, v, go, active]) => /*#__PURE__*/_jsxDEV("div", {
         className: "card p-3 cursor-pointer transition hover:brightness-125",
         style: active ? { borderColor: "#f5c542" } : {},
@@ -1232,7 +1259,7 @@ function Admin() {
         style: {
           width: "200px"
         },
-        placeholder: "🔍 Search name or email",
+        placeholder: "🔍 Search name, email, or address",
         value: search,
         onChange: e => setSearch(e.target.value)
       }, void 0, false), /*#__PURE__*/_jsxDEV("select", {
@@ -1350,6 +1377,9 @@ function Admin() {
               }, void 0, false), /*#__PURE__*/_jsxDEV("p", {
                 children: a.phone || "—"
               }, void 0, false), /*#__PURE__*/_jsxDEV("p", {
+                      className: "text-xs opacity-80",
+                      children: "📍 " + (a.address || "No address given") + (a.relocate ? " · ✅ Willing to relocate" : "")
+                    }, void 0, false), /*#__PURE__*/_jsxDEV("p", {
                 className: "text-xs opacity-50 uppercase mt-3 mb-1",
                 children: "AI resume summary"
               }, void 0, false), /*#__PURE__*/_jsxDEV("p", {
