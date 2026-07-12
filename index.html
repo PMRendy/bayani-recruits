@@ -493,7 +493,13 @@ const WEIGHTS = {
   integrity: 15,
   culture: 10
 };
-const VOICE_SCRIPT = `Good evening! My name is [your name], and I'm applying to join the SMB Virtual Staffing team. I have experience handling client communications, and I'm comfortable working the night shift. In my previous role, I learned that clear communication and reliability are the most important parts of remote work. Thank you for considering my application — I look forward to speaking with you soon.`;
+const VOICE_SCRIPT = `Create a voice recording in English for no more than 2 minutes but not less than 1.
+
+In your recording, please:
+• Introduce yourself
+• Share your work experience (if any)
+• Describe the kind of work that you do — or the subject you loved most at school
+• Talk about how you would typically enjoy your Sunday afternoon`;
 const STAGES = ["Applied", "Shortlisted", "Voice/Assessment", "For Interview", "Hire in the Future", "Hired", "Rejected"];
 const stageColor = {
   "Applied": "#8f9bd4",
@@ -858,7 +864,7 @@ function VoiceStep({
       setStatus("recording");
       setSecs(0);
       timer.current = setInterval(() => setSecs(s => {
-        if (s >= 59 && mr.state === "recording") {
+        if (s >= 119 && mr.state === "recording") {
           mr.stop();
           clearInterval(timer.current);
           setStatus("review");
@@ -914,10 +920,10 @@ function VoiceStep({
     className: "card p-6 fade",
     children: [/*#__PURE__*/_jsxDEV("h3", {
       className: "font-bold gold mb-2",
-      children: "Voice recording (max 60 seconds)"
+      children: "Voice recording (1 to 2 minutes)"
     }, void 0, false), /*#__PURE__*/_jsxDEV("p", {
       className: "text-sm opacity-80 mb-3",
-      children: "Please read this script aloud in a natural, professional voice:"
+      children: "Speak naturally, in English, as if you\u2019re introducing yourself to a future teammate:"
     }, void 0, false), /*#__PURE__*/_jsxDEV("div", {
       className: "bg-black/30 rounded-xl p-4 text-sm leading-relaxed mb-4 border border-yellow-500/20",
       children: VOICE_SCRIPT
@@ -929,7 +935,7 @@ function VoiceStep({
       className: "text-center",
       children: [/*#__PURE__*/_jsxDEV("p", {
         className: "text-2xl font-mono mb-3 text-red-400",
-        children: ["● 0:", String(secs % 60).padStart(2, "0")]
+        children: ["● ", Math.floor(secs / 60), ":", String(secs % 60).padStart(2, "0"), secs < 60 ? " (min 1:00)" : ""]
       }, void 0, true), /*#__PURE__*/_jsxDEV("button", {
         className: "btn w-full",
         onClick: stop,
@@ -952,9 +958,9 @@ function VoiceStep({
           children: "Re-record"
         }, void 0, false), /*#__PURE__*/_jsxDEV("button", {
           className: "btn flex-1",
-          disabled: !blob || busy,
-          onClick: submit,
-          children: busy ? "Uploading…" : "Submit recording"
+          disabled: !blob || busy || secs < 60,
+            onClick: submit,
+            children: busy ? "Uploading…" : secs < 60 ? "Too short — record at least 1 minute" : "Submit recording"
         }, void 0, false)]
       }, void 0, true)]
     }, void 0, true)]
