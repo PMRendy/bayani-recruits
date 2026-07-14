@@ -525,6 +525,34 @@ const Pill = ({
 
 /* ============ APPLICANT: APPLICATION FORM ============ */
 
+
+function ComposeModal({ a, onClose, notify, logEmail }) {
+  const e = React.createElement;
+  const [subject, setSubject] = useState("");
+  const [body, setBody] = useState("Hi " + a.name.split(" ")[0] + ",\n\n\n\n— " + CONFIG.FROM_NAME + "\nrendy@smb-vs.com");
+  const [busy, setBusy] = useState(false);
+  const send = async () => {
+    if (!subject.trim() || !body.trim()) { alert("Subject at body ay kailangan pareho."); return; }
+    setBusy(true);
+    const ok = await sendEmail(a.email, subject.trim(), body);
+    setBusy(false);
+    if (ok) { logEmail(a, "custom: " + subject.trim().slice(0, 40)); notify("✉️ Custom email sent to " + a.name); onClose(); }
+    else alert("Send failed — gisingin muna ang proxy (buksan ang proxy URL sa ibang tab) tapos try ulit.");
+  };
+  return e("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: "16px" }, onClick: ev => { if (ev.target === ev.currentTarget) onClose(); } },
+    e("div", { className: "card p-5 w-full", style: { maxWidth: "560px" } },
+      e("div", { className: "flex justify-between items-center mb-3" },
+        e("p", { className: "font-bold gold" }, "✉️ Custom email"),
+        e("button", { className: "btn2 text-xs", onClick: onClose }, "✕ Close")
+      ),
+      e("p", { className: "text-xs opacity-60 mb-3" }, "To: " + a.name + " <" + a.email + ">"),
+      e("input", { placeholder: "Subject", value: subject, onChange: ev => setSubject(ev.target.value), className: "mb-2" }),
+      e("textarea", { rows: 10, value: body, onChange: ev => setBody(ev.target.value), style: { fontFamily: "inherit" } }),
+      e("button", { className: "btn w-full mt-3", disabled: busy, onClick: send }, busy ? "Sending…" : "Send email")
+    )
+  );
+}
+
 function AnswersViewer({ a }) {
   const e = React.createElement;
   const answers = (a.assessment && a.assessment.answers) || {};
@@ -564,7 +592,8 @@ function ApplyForm({
     position: "General VA",
     expText: "",
     address: "",
-    relocate: false
+    relocate: false,
+    source: ""
   });
   const [pdfB64, setPdfB64] = useState(null);
   const [resumeName, setResumeName] = useState("");
@@ -631,6 +660,7 @@ function ApplyForm({
       phone: f.phone.trim(),
       address: f.address.trim(),
       relocate: f.relocate,
+      source: f.source,
       position: f.position,
       resume_text: ai.resume_text || f.expText || "",
       exp_text: f.expText,
@@ -723,6 +753,17 @@ function ApplyForm({
         }, void 0, false), /*#__PURE__*/_jsxDEV("option", {
           children: "Customer Support"
         }, void 0, false)]
+      }, void 0, true), /*#__PURE__*/_jsxDEV("select", {
+        value: f.source,
+        onChange: e => setF({ ...f, source: e.target.value }),
+        children: [/*#__PURE__*/_jsxDEV("option", { value: "", children: "How did you learn about SMB?" }, void 0, false),
+          /*#__PURE__*/_jsxDEV("option", { children: "Facebook" }, void 0, false),
+          /*#__PURE__*/_jsxDEV("option", { children: "Friends / Family" }, void 0, false),
+          /*#__PURE__*/_jsxDEV("option", { children: "SMB Staff (referral)" }, void 0, false),
+          /*#__PURE__*/_jsxDEV("option", { children: "Job posting site (Indeed, JobStreet, etc.)" }, void 0, false),
+          /*#__PURE__*/_jsxDEV("option", { children: "TikTok" }, void 0, false),
+          /*#__PURE__*/_jsxDEV("option", { children: "Saw the office / local community" }, void 0, false),
+          /*#__PURE__*/_jsxDEV("option", { children: "Other" }, void 0, false)]
       }, void 0, true), /*#__PURE__*/_jsxDEV("div", {
         children: [/*#__PURE__*/_jsxDEV("label", {
           className: "text-sm opacity-80 block mb-1",
@@ -1122,6 +1163,7 @@ function Admin() {
   });
   const [filterStage, setFilterStage] = useState("All");
   const [quick, setQuick] = useState(null);
+  const [composeFor, setComposeFor] = useState(null);
   const [filterExp, setFilterExp] = useState("All");
   const [sort, setSort] = useState("ai");
   const [search, setSearch] = useState("");
@@ -1211,6 +1253,10 @@ function Admin() {
       ...fields
     } : a));
   };
+  const logEmail = async (a, label) => {
+    const log = [...(a.email_log || []), { at: new Date().toISOString(), type: label, ok: true }];
+    await patch(a.id, { email_log: log });
+  };
   const doEmail = async (a, type) => {
     const link = window.location.origin + window.location.pathname + "?steps=" + a.id;
     const em = type === "nextSteps" ? EMAILS.nextSteps(a.name, link) : EMAILS[type](a.name);
@@ -1238,7 +1284,7 @@ function Admin() {
     children: [toast && /*#__PURE__*/_jsxDEV("div", {
       className: "fixed top-4 right-4 card px-4 py-3 text-sm z-50",
       children: toast
-    }, void 0, false), /*#__PURE__*/_jsxDEV("div", {
+    }, void 0, false), composeFor && /*#__PURE__*/_jsxDEV(ComposeModal, { a: composeFor, onClose: () => setComposeFor(null), notify: notify, logEmail: logEmail }, void 0, false), /*#__PURE__*/_jsxDEV("div", {
       className: "grid grid-cols-2 md:grid-cols-6 gap-3 mb-5",
       children: [
         ["Total applicants", counts.total, () => { setFilterStage("All"); setFilterExp("All"); setQuick(null); setPage(0); }, filterStage === "All" && filterExp === "All" && !quick],
@@ -1386,6 +1432,9 @@ function Admin() {
                       className: "text-xs opacity-80",
                       children: "📍 " + (a.address || "No address given") + (a.relocate ? " · ✅ Willing to relocate" : "")
                     }, void 0, false), /*#__PURE__*/_jsxDEV("p", {
+                      className: "text-xs opacity-60",
+                      children: "📣 Source: " + (a.source || "—")
+                    }, void 0, false), /*#__PURE__*/_jsxDEV("p", {
                 className: "text-xs opacity-50 uppercase mt-3 mb-1",
                 children: "AI resume summary"
               }, void 0, false), /*#__PURE__*/_jsxDEV("p", {
@@ -1489,7 +1538,7 @@ function Admin() {
               className: "btn2 text-xs",
               onClick: () => doEmail(a, "interview"),
               children: "✉️ Invite to shadowing + interview"
-            }, void 0, false), /*#__PURE__*/_jsxDEV("button", { className: "btn2 text-xs", onClick: () => doEmail(a, "thankYou"), children: "✉️ Thank you (after shadowing)" }, void 0, false), /*#__PURE__*/_jsxDEV("button", {
+            }, void 0, false), /*#__PURE__*/_jsxDEV("button", { className: "btn2 text-xs", onClick: () => doEmail(a, "thankYou"), children: "✉️ Thank you (after shadowing)" }, void 0, false), /*#__PURE__*/_jsxDEV("button", { className: "btn2 text-xs", onClick: () => setComposeFor(a), children: "✍️ Custom email" }, void 0, false), /*#__PURE__*/_jsxDEV("button", {
               className: "btn2 text-xs",
               onClick: () => doEmail(a, "regrets"),
               children: "✉️ Send regrets"
