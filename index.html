@@ -672,7 +672,7 @@ function ApplyForm({
       email_log: []
     }).select().single();
     if (error) {
-      setErr("Something went wrong saving your application. Please try again.");
+      setErr("Something went wrong saving your application: " + (error.message || "unknown error") + " — please try again or contact rendy@smb-vs.com");
       setBusy(false);
       return;
     }
