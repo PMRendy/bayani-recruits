@@ -400,6 +400,22 @@ Thank you for your interest in {{company}}. After careful review, we won't be mo
 We'll keep your details on file for future openings. We wish you the best in your job search!
 
 {{fromName}}`
+  },
+  futureHire: {
+    subject: `You stood out to us — let's stay in touch — {{company}}`,
+    body: `Hi {{name}},
+
+Thank you so much for taking the time to apply and interview with us. We were genuinely impressed by your skills, professionalism, and the energy you brought to the process.
+
+I want to be upfront with you: the slot we were hiring for has just been filled. That said, this is not a rejection of you as a candidate — quite the opposite. You stood out to us, and we would very much like to reach out to you first when our next opening comes up. Given how our client accounts grow, that could be sooner rather than later.
+
+With your permission, I'd like to keep your application on file and stay in touch. If anything changes on your end — availability, contact details, or new skills you've picked up — feel free to send me a quick note anytime.
+
+Thank you again for your interest in joining our team. I hope this is just the beginning of our conversation.
+
+Best regards,
+{{fromName}}
+Hiring Manager / Owner`
   }
 };
 function renderTemplate(tpl, vars) {
@@ -606,7 +622,8 @@ const TEMPLATE_TYPES = [
   { id: "nextSteps", label: "Next steps: voice + assessment" },
   { id: "interview", label: "Shadowing + final interview invite" },
   { id: "thankYou", label: "Thank you (after shadowing)" },
-  { id: "regrets", label: "Regrets" }
+  { id: "regrets", label: "Regrets" },
+  { id: "futureHire", label: "Hire in the future (keep on file)" }
 ];
 function TemplatesModal({ onClose, notify }) {
   const e = React.createElement;
@@ -1556,7 +1573,8 @@ function Admin() {
     const stageMap = {
       nextSteps: "Shortlisted",
       interview: "For Interview",
-      regrets: "Rejected"
+      regrets: "Rejected",
+      futureHire: "Hire in the Future"
     };
     await patch(a.id, {
       email_log: log,
@@ -1951,6 +1969,10 @@ function Admin() {
               onClick: () => doEmail(a, "interview"),
               children: "✉️ Invite to shadowing + interview"
             }, void 0, false), /*#__PURE__*/_jsxDEV("button", { className: "btn2 text-xs", onClick: () => doEmail(a, "thankYou"), children: "✉️ Thank you (after shadowing)" }, void 0, false), /*#__PURE__*/_jsxDEV("button", { className: "btn2 text-xs", onClick: () => setComposeFor(a), children: "✍️ Custom email" }, void 0, false), /*#__PURE__*/_jsxDEV("button", {
+              className: "btn2 text-xs",
+              onClick: () => doEmail(a, "futureHire"),
+              children: "🌟 Send \"hire in the future\" email"
+            }, void 0, false), /*#__PURE__*/_jsxDEV("button", {
               className: "btn2 text-xs",
               onClick: () => doEmail(a, "regrets"),
               children: "✉️ Send regrets"
