@@ -1861,7 +1861,7 @@ function Admin() {
               }, void 0, false), /*#__PURE__*/_jsxDEV("p", {
                 children: a.email
               }, void 0, false), /*#__PURE__*/_jsxDEV("p", {
-                children: a.phone ? [/*#__PURE__*/_jsxDEV("a", { href: "tel:" + a.phone, style: { color: "inherit", textDecoration: "underline" } }, a.phone), waLink(a.phone) && /*#__PURE__*/_jsxDEV("a", { href: waLink(a.phone), target: "_blank", rel: "noreferrer", style: { marginLeft: "8px" }, title: "Chat on WhatsApp" }, "\ud83d\udcac")] : "—"
+                children: a.phone ? ["\ud83d\udcde ", /*#__PURE__*/_jsxDEV("a", { href: "tel:" + a.phone, style: { color: "inherit", textDecoration: "underline" } }, a.phone), waLink(a.phone) && /*#__PURE__*/_jsxDEV("a", { href: waLink(a.phone), target: "_blank", rel: "noreferrer", style: { marginLeft: "8px" }, title: "Chat on WhatsApp" }, "\ud83d\udcac")] : /*#__PURE__*/_jsxDEV("span", { style: { opacity: 0.5 } }, "\ud83d\udcde No phone number on file")
               }, void 0, false), /*#__PURE__*/_jsxDEV("p", {
                       className: "text-xs opacity-80",
                       children: "📍 " + (a.address || "No address given") + (a.relocate ? " · ✅ Willing to relocate" : "")
@@ -1993,6 +1993,14 @@ function Admin() {
                   style: { opacity: 0.6 },
                   onClick: () => patch(a.id, { call_attempts: 0, last_called_at: null }),
                   children: "Reset"
+                }, void 0, false),
+                waLink(a.phone) && /*#__PURE__*/_jsxDEV("a", {
+                  className: "btn2 text-xs",
+                  href: waLink(a.phone),
+                  target: "_blank",
+                  rel: "noreferrer",
+                  style: { textDecoration: "none" },
+                  children: "\ud83d\udcac WhatsApp"
                 }, void 0, false)
               ]
             }, void 0, true), /*#__PURE__*/_jsxDEV("button", {
