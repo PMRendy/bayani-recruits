@@ -419,6 +419,18 @@ Thank you again for your interest in joining our team. I hope this is just the b
 Best regards,
 {{fromName}}
 Hiring Manager / Owner`
+  },
+  missedCall: {
+    subject: `We tried calling you — quick update on your application — {{company}}`,
+    body: `Hi {{name}},
+
+I tried giving you a call earlier to further discuss your application and share some feedback on your assessment results, but wasn't able to reach you.
+
+When you get a chance, please give me a call or send me a message on Viber at 09166343428 — that number is Viber-ready, so feel free to message there if a call isn't convenient.
+
+Looking forward to connecting with you soon!
+
+— {{fromName}}`
   }
 };
 function renderTemplate(tpl, vars) {
@@ -626,7 +638,8 @@ const TEMPLATE_TYPES = [
   { id: "interview", label: "Shadowing + final interview invite" },
   { id: "thankYou", label: "Thank you (after shadowing)" },
   { id: "regrets", label: "Regrets" },
-  { id: "futureHire", label: "Hire in the future (keep on file)" }
+  { id: "futureHire", label: "Hire in the future (keep on file)" },
+  { id: "missedCall", label: "Missed call follow-up (no stage change)" }
 ];
 function TemplatesModal({ onClose, notify }) {
   const e = React.createElement;
@@ -2092,7 +2105,7 @@ function Admin() {
               className: "btn2 text-xs",
               onClick: () => doEmail(a, "interview"),
               children: "✉️ Invite to shadowing + interview"
-            }, void 0, false), /*#__PURE__*/_jsxDEV("button", { className: "btn2 text-xs", onClick: () => doEmail(a, "thankYou"), children: "✉️ Thank you (after shadowing)" }, void 0, false), /*#__PURE__*/_jsxDEV("button", { className: "btn2 text-xs", onClick: () => setComposeFor(a), children: "✍️ Custom email" }, void 0, false), /*#__PURE__*/_jsxDEV("button", {
+            }, void 0, false), /*#__PURE__*/_jsxDEV("button", { className: "btn2 text-xs", onClick: () => doEmail(a, "thankYou"), children: "✉️ Thank you (after shadowing)" }, void 0, false), /*#__PURE__*/_jsxDEV("button", { className: "btn2 text-xs", onClick: () => doEmail(a, "missedCall"), children: "\ud83d\udcde Missed call follow-up" }, void 0, false), /*#__PURE__*/_jsxDEV("button", { className: "btn2 text-xs", onClick: () => setComposeFor(a), children: "✍️ Custom email" }, void 0, false), /*#__PURE__*/_jsxDEV("button", {
               className: "btn2 text-xs",
               onClick: () => doEmail(a, "futureHire"),
               children: "🌟 Send \"hire in the future\" email"
