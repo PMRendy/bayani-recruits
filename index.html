@@ -994,12 +994,15 @@ function ApplyForm({
           email: e.target.value
         })
       }, void 0, false), /*#__PURE__*/_jsxDEV("input", {
-        placeholder: "Mobile number",
+        placeholder: "Mobile number (1 best contact number only)",
         value: f.phone,
         onChange: e => setF({
           ...f,
           phone: e.target.value
         })
+      }, void 0, false), /*#__PURE__*/_jsxDEV("p", {
+        className: "text-xs opacity-60 -mt-2",
+        children: "Please give just 1 best contact number \u2014 ideally one registered to Viber. If you have an alternate number, list it on your resume instead."
       }, void 0, false), /*#__PURE__*/_jsxDEV("input", {
         placeholder: "Home address (Barangay, City/Municipality, Province)",
         value: f.address,
@@ -1608,9 +1611,16 @@ function Admin() {
     const lastAt = (a.email_log && a.email_log.length) ? a.email_log[a.email_log.length - 1].at : a.created_at;
     return lastAt ? Math.floor((Date.now() - new Date(lastAt).getTime()) / 86400000) : 0;
   };
+  const firstPhone = phone => {
+    if (!phone) return "";
+    // Applicants sometimes enter two numbers separated by /, comma, "or", etc.
+    // Only the first is usable for tel:/Viber links — full text still shown to the recruiter.
+    return phone.split(/[\/,;]|(?:\s+or\s+)/i)[0].trim();
+  };
   const viberLink = phone => {
-    if (!phone) return null;
-    let digits = phone.replace(/[^0-9]/g, "");
+    const clean = firstPhone(phone);
+    if (!clean) return null;
+    let digits = clean.replace(/[^0-9]/g, "");
     if (!digits) return null;
     if (digits.startsWith("0")) digits = "63" + digits.slice(1);
     else if (digits.length === 10) digits = "63" + digits;
@@ -1828,7 +1838,7 @@ function Admin() {
               children: [a.position, " · ", new Date(a.created_at).toLocaleDateString()]
             }, void 0, true), a.phone && /*#__PURE__*/_jsxDEV("p", {
               className: "text-xs",
-              children: /*#__PURE__*/_jsxDEV("a", { href: "tel:" + a.phone, style: { color: "inherit", textDecoration: "underline" }, onClick: e => e.stopPropagation() }, "\ud83d\udcde " + a.phone)
+              children: /*#__PURE__*/_jsxDEV("a", { href: "tel:" + firstPhone(a.phone), style: { color: "inherit", textDecoration: "underline" }, onClick: e => e.stopPropagation() }, "\ud83d\udcde " + a.phone)
             }, void 0, false)]
           }, void 0, true), /*#__PURE__*/_jsxDEV(Pill, {
             bg: stageColor[a.stage] || "#8f9bd4",
@@ -1866,7 +1876,7 @@ function Admin() {
               }, void 0, false), /*#__PURE__*/_jsxDEV("p", {
                 children: a.email
               }, void 0, false), /*#__PURE__*/_jsxDEV("p", {
-                children: a.phone ? [/*#__PURE__*/_jsxDEV("a", { href: "tel:" + a.phone, style: { color: "inherit", textDecoration: "underline", fontWeight: 600, fontSize: "1.05em" } }, "\ud83d\udcde " + a.phone), viberLink(a.phone) && /*#__PURE__*/_jsxDEV("a", { href: viberLink(a.phone), target: "_blank", rel: "noreferrer", style: { marginLeft: "8px" }, title: "Message on Viber" }, "\ud83d\udcf1")] : /*#__PURE__*/_jsxDEV("span", { style: { opacity: 0.5 } }, "\ud83d\udcde No phone number on file")
+                children: a.phone ? [/*#__PURE__*/_jsxDEV("a", { href: "tel:" + firstPhone(a.phone), style: { color: "inherit", textDecoration: "underline", fontWeight: 600, fontSize: "1.05em" } }, "\ud83d\udcde " + a.phone), viberLink(a.phone) && /*#__PURE__*/_jsxDEV("a", { href: viberLink(a.phone), target: "_blank", rel: "noreferrer", style: { marginLeft: "8px" }, title: "Message on Viber" }, "\ud83d\udcf1")] : /*#__PURE__*/_jsxDEV("span", { style: { opacity: 0.5 } }, "\ud83d\udcde No phone number on file")
               }, void 0, false), /*#__PURE__*/_jsxDEV("p", {
                       className: "text-xs opacity-80",
                       children: "📍 " + (a.address || "No address given") + (a.relocate ? " · ✅ Willing to relocate" : "")
