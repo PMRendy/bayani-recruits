@@ -66,12 +66,13 @@ const {
 const CONFIG = {
   SUPABASE_URL: "https://leqxjjcwgsulyidlgacr.supabase.co",
   SUPABASE_KEY: "sb_publishable_kTkxLLUKROIpTW9TgtGcTQ_2cQxcdES",
-  EMAIL_PROXY_URL: "https://bayani-email-proxy.onrender.com/send-email",
+  EMAIL_PROXY_URL: "https://bayani-email-proxy.netlify.app/send-email",
   // palitan after mo i-deploy yung email proxy
   ADMIN_PASSWORD: "smbvs2026",
   // PALITAN MO ITO
   COMPANY: "SMB Virtual Staffing",
   FROM_NAME: "SMB VS Recruitment Team",
+  CONTACT_WHATSAPP: "639166343428",
   PAGE_SIZE: 50
 };
 /* ========================================== */
@@ -968,8 +969,11 @@ function ApplyForm({
       className: "text-xl font-bold gold mb-1",
       children: "Apply now"
     }, void 0, false), /*#__PURE__*/_jsxDEV("p", {
-      className: "text-sm opacity-70 mb-5",
+      className: "text-sm opacity-70 mb-2",
       children: ["Join the Bayani — ", CONFIG.COMPANY]
+    }, void 0, true), /*#__PURE__*/_jsxDEV("p", {
+      className: "text-sm mb-5",
+      children: ["Questions? ", /*#__PURE__*/_jsxDEV("a", { href: "https://wa.me/" + CONFIG.CONTACT_WHATSAPP, target: "_blank", rel: "noreferrer", style: { color: "inherit", textDecoration: "underline" } }, "\ud83d\udcac Chat with us on WhatsApp")]
     }, void 0, true), /*#__PURE__*/_jsxDEV("div", {
       className: "space-y-3",
       children: [/*#__PURE__*/_jsxDEV("input", {
@@ -1602,6 +1606,14 @@ function Admin() {
     const lastAt = (a.email_log && a.email_log.length) ? a.email_log[a.email_log.length - 1].at : a.created_at;
     return lastAt ? Math.floor((Date.now() - new Date(lastAt).getTime()) / 86400000) : 0;
   };
+  const waLink = phone => {
+    if (!phone) return null;
+    let digits = phone.replace(/[^0-9]/g, "");
+    if (!digits) return null;
+    if (digits.startsWith("0")) digits = "63" + digits.slice(1);
+    else if (digits.length === 10) digits = "63" + digits;
+    return "https://wa.me/" + digits;
+  };
   const toggleSelect = id => {
     setSelected(prev => {
       const next = new Set(prev);
@@ -1648,7 +1660,7 @@ function Admin() {
     q = q.order("ai_score", { ascending: false, nullsFirst: false });
     const { data, error } = await q;
     if (error) { alert("Export failed: " + error.message); return; }
-    const cols = ["name", "email", "phone", "address", "relocate", "position", "source", "referred_by", "stage", "ai_score", "ai_category", "ai_summary", "interview_date", "notes", "created_at"];
+    const cols = ["name", "email", "phone", "address", "relocate", "position", "source", "referred_by", "stage", "ai_score", "ai_category", "ai_summary", "interview_date", "call_attempts", "last_called_at", "notes", "created_at"];
     const esc = v => '"' + String(v ?? "").replace(/"/g, '""') + '"';
     const rows = [cols.join(",")].concat((data || []).map(a => cols.map(c => esc(a[c])).join(",")));
     const blob = new Blob([rows.join("\n")], { type: "text/csv;charset=utf-8;" });
@@ -1831,6 +1843,9 @@ function Admin() {
           }, void 0, true), isStale(a) && /*#__PURE__*/_jsxDEV(Pill, {
             bg: "#f87171",
             children: ["⏳ ", daysAgo(a), "d no contact"]
+          }, void 0, true), (a.call_attempts || 0) > 0 && /*#__PURE__*/_jsxDEV(Pill, {
+            bg: "#fb923c",
+            children: ["📞 ", a.call_attempts]
           }, void 0, true), /*#__PURE__*/_jsxDEV("span", {
             className: "text-xs opacity-40",
             children: open === a.id ? "▲" : "▼"
@@ -1846,7 +1861,7 @@ function Admin() {
               }, void 0, false), /*#__PURE__*/_jsxDEV("p", {
                 children: a.email
               }, void 0, false), /*#__PURE__*/_jsxDEV("p", {
-                children: a.phone || "—"
+                children: a.phone ? [/*#__PURE__*/_jsxDEV("a", { href: "tel:" + a.phone, style: { color: "inherit", textDecoration: "underline" } }, a.phone), waLink(a.phone) && /*#__PURE__*/_jsxDEV("a", { href: waLink(a.phone), target: "_blank", rel: "noreferrer", style: { marginLeft: "8px" }, title: "Chat on WhatsApp" }, "\ud83d\udcac")] : "—"
               }, void 0, false), /*#__PURE__*/_jsxDEV("p", {
                       className: "text-xs opacity-80",
                       children: "📍 " + (a.address || "No address given") + (a.relocate ? " · ✅ Willing to relocate" : "")
@@ -1958,6 +1973,26 @@ function Admin() {
                   style: { width: "auto" },
                   value: a.interview_date ? a.interview_date.slice(0, 10) : "",
                   onChange: e => patch(a.id, { interview_date: e.target.value || null })
+                }, void 0, false)
+              ]
+            }, void 0, true), /*#__PURE__*/_jsxDEV("div", {
+              className: "flex items-center gap-1",
+              children: [
+                /*#__PURE__*/_jsxDEV("span", { className: "text-xs opacity-60", children: "\ud83d\udcde Calls:" }, void 0, false),
+                /*#__PURE__*/_jsxDEV("button", {
+                  className: "btn2 text-xs",
+                  onClick: () => patch(a.id, { call_attempts: (a.call_attempts || 0) + 1, last_called_at: new Date().toISOString() }),
+                  children: "+1 Call"
+                }, void 0, false),
+                (a.call_attempts || 0) > 0 && /*#__PURE__*/_jsxDEV("span", {
+                  className: "text-xs opacity-70",
+                  children: (a.call_attempts || 0) + "x" + (a.last_called_at ? " \u00b7 last " + new Date(a.last_called_at).toLocaleDateString() : "")
+                }, void 0, false),
+                (a.call_attempts || 0) > 0 && /*#__PURE__*/_jsxDEV("button", {
+                  className: "btn2 text-xs",
+                  style: { opacity: 0.6 },
+                  onClick: () => patch(a.id, { call_attempts: 0, last_called_at: null }),
+                  children: "Reset"
                 }, void 0, false)
               ]
             }, void 0, true), /*#__PURE__*/_jsxDEV("button", {
