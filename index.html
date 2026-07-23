@@ -72,7 +72,7 @@ const CONFIG = {
   // PALITAN MO ITO
   COMPANY: "SMB Virtual Staffing",
   FROM_NAME: "SMB VS Recruitment Team",
-  CONTACT_WHATSAPP: "639166343428",
+  CONTACT_VIBER: "639166343428",
   PAGE_SIZE: 50
 };
 /* ========================================== */
@@ -344,6 +344,8 @@ Good news — you've been shortlisted! Please complete the next steps here:
 {{link}}
 
 This includes a short voice recording and an online assessment (about 20-25 minutes). Please complete it within 48 hours.
+
+Once you've submitted it, please send a message to our hiring manager via Viber at 09166343428 to confirm — this helps us process your application faster.
 
 {{fromName}}`
   },
@@ -973,7 +975,7 @@ function ApplyForm({
       children: ["Join the Bayani — ", CONFIG.COMPANY]
     }, void 0, true), /*#__PURE__*/_jsxDEV("p", {
       className: "text-sm mb-5",
-      children: ["Questions? ", /*#__PURE__*/_jsxDEV("a", { href: "https://wa.me/" + CONFIG.CONTACT_WHATSAPP, target: "_blank", rel: "noreferrer", style: { color: "inherit", textDecoration: "underline" } }, "\ud83d\udcac Chat with us on WhatsApp")]
+      children: ["Questions? ", /*#__PURE__*/_jsxDEV("a", { href: "viber://chat?number=%2B" + CONFIG.CONTACT_VIBER, target: "_blank", rel: "noreferrer", style: { color: "inherit", textDecoration: "underline" } }, "\ud83d\udcf1 Message us on Viber")]
     }, void 0, true), /*#__PURE__*/_jsxDEV("div", {
       className: "space-y-3",
       children: [/*#__PURE__*/_jsxDEV("input", {
@@ -1606,13 +1608,13 @@ function Admin() {
     const lastAt = (a.email_log && a.email_log.length) ? a.email_log[a.email_log.length - 1].at : a.created_at;
     return lastAt ? Math.floor((Date.now() - new Date(lastAt).getTime()) / 86400000) : 0;
   };
-  const waLink = phone => {
+  const viberLink = phone => {
     if (!phone) return null;
     let digits = phone.replace(/[^0-9]/g, "");
     if (!digits) return null;
     if (digits.startsWith("0")) digits = "63" + digits.slice(1);
     else if (digits.length === 10) digits = "63" + digits;
-    return "https://wa.me/" + digits;
+    return "viber://chat?number=%2B" + digits;
   };
   const toggleSelect = id => {
     setSelected(prev => {
@@ -1824,7 +1826,10 @@ function Admin() {
             }, void 0, false), /*#__PURE__*/_jsxDEV("p", {
               className: "text-xs opacity-60",
               children: [a.position, " · ", new Date(a.created_at).toLocaleDateString()]
-            }, void 0, true)]
+            }, void 0, true), a.phone && /*#__PURE__*/_jsxDEV("p", {
+              className: "text-xs",
+              children: /*#__PURE__*/_jsxDEV("a", { href: "tel:" + a.phone, style: { color: "inherit", textDecoration: "underline" }, onClick: e => e.stopPropagation() }, "\ud83d\udcde " + a.phone)
+            }, void 0, false)]
           }, void 0, true), /*#__PURE__*/_jsxDEV(Pill, {
             bg: stageColor[a.stage] || "#8f9bd4",
             children: a.stage
@@ -1861,7 +1866,7 @@ function Admin() {
               }, void 0, false), /*#__PURE__*/_jsxDEV("p", {
                 children: a.email
               }, void 0, false), /*#__PURE__*/_jsxDEV("p", {
-                children: a.phone ? ["\ud83d\udcde ", /*#__PURE__*/_jsxDEV("a", { href: "tel:" + a.phone, style: { color: "inherit", textDecoration: "underline" } }, a.phone), waLink(a.phone) && /*#__PURE__*/_jsxDEV("a", { href: waLink(a.phone), target: "_blank", rel: "noreferrer", style: { marginLeft: "8px" }, title: "Chat on WhatsApp" }, "\ud83d\udcac")] : /*#__PURE__*/_jsxDEV("span", { style: { opacity: 0.5 } }, "\ud83d\udcde No phone number on file")
+                children: a.phone ? [/*#__PURE__*/_jsxDEV("a", { href: "tel:" + a.phone, style: { color: "inherit", textDecoration: "underline", fontWeight: 600, fontSize: "1.05em" } }, "\ud83d\udcde " + a.phone), viberLink(a.phone) && /*#__PURE__*/_jsxDEV("a", { href: viberLink(a.phone), target: "_blank", rel: "noreferrer", style: { marginLeft: "8px" }, title: "Message on Viber" }, "\ud83d\udcf1")] : /*#__PURE__*/_jsxDEV("span", { style: { opacity: 0.5 } }, "\ud83d\udcde No phone number on file")
               }, void 0, false), /*#__PURE__*/_jsxDEV("p", {
                       className: "text-xs opacity-80",
                       children: "📍 " + (a.address || "No address given") + (a.relocate ? " · ✅ Willing to relocate" : "")
@@ -1994,13 +1999,13 @@ function Admin() {
                   onClick: () => patch(a.id, { call_attempts: 0, last_called_at: null }),
                   children: "Reset"
                 }, void 0, false),
-                waLink(a.phone) && /*#__PURE__*/_jsxDEV("a", {
+                viberLink(a.phone) && /*#__PURE__*/_jsxDEV("a", {
                   className: "btn2 text-xs",
-                  href: waLink(a.phone),
+                  href: viberLink(a.phone),
                   target: "_blank",
                   rel: "noreferrer",
                   style: { textDecoration: "none" },
-                  children: "\ud83d\udcac WhatsApp"
+                  children: "\ud83d\udcf1 Viber"
                 }, void 0, false)
               ]
             }, void 0, true), /*#__PURE__*/_jsxDEV("button", {
