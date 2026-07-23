@@ -594,6 +594,11 @@ In your recording, please:
 • Describe the kind of work that you do — or the subject you loved most at school
 • Talk about how you would typically enjoy your Sunday afternoon`;
 const STAGES = ["Applied", "Shortlisted", "Voice/Assessment", "For Interview", "Hire in the Future", "Hired", "Rejected"];
+// These stages are "closed" — once an applicant lands here, they should only ever
+// show up when their own stage tab is explicitly selected, never in "All", "With
+// experience", "Voice done", or "Assessment done" views.
+const HIDDEN_FROM_ALL_STAGES = ["Rejected", "Hire in the Future", "Hired"];
+const excludeHiddenStages = q => HIDDEN_FROM_ALL_STAGES.reduce((qq, s) => qq.not("stage", "eq", s), q);
 const stageColor = {
   "Applied": "#8f9bd4",
   "Shortlisted": "#f5c542",
@@ -1568,26 +1573,18 @@ function Admin() {
     setTimeout(() => setToast(""), 3000);
   };
   const loadCounts = async () => {
-    const q = f => sb.from("applicants").select("id", {
+    const base = () => sb.from("applicants").select("id", {
       count: "exact",
       head: true
     });
-    const [t, v, a, iv, we, hi] = await Promise.all([q(), sb.from("applicants").select("id", {
-      count: "exact",
-      head: true
-    }).not("voice_path", "is", null), sb.from("applicants").select("id", {
-      count: "exact",
-      head: true
-    }).not("assessment", "is", null), sb.from("applicants").select("id", {
-      count: "exact",
-      head: true
-    }).eq("stage", "For Interview"), sb.from("applicants").select("id", {
-      count: "exact",
-      head: true
-    }).neq("ai_category", "No Experience"), sb.from("applicants").select("id", {
-      count: "exact",
-      head: true
-    }).eq("stage", "Hired")]);
+    const [t, v, a, iv, we, hi] = await Promise.all([
+      excludeHiddenStages(base()),
+      excludeHiddenStages(base().not("voice_path", "is", null)),
+      excludeHiddenStages(base().not("assessment", "is", null)),
+      base().eq("stage", "For Interview"),
+      excludeHiddenStages(base().neq("ai_category", "No Experience")),
+      base().eq("stage", "Hired")
+    ]);
     setCounts({
       total: t.count || 0,
       voice: v.count || 0,
@@ -1601,6 +1598,7 @@ function Admin() {
     setLoading(true);
     let q = sb.from("applicants").select("*");
     if (filterStage !== "All") q = q.eq("stage", filterStage);
+    else q = excludeHiddenStages(q);
     if (filterExp === "With") q = q.neq("ai_category", "No Experience");
     if (filterExp === "Without") q = q.eq("ai_category", "No Experience");
     if (quick === "voice") q = q.not("voice_path", "is", null);
@@ -1743,6 +1741,7 @@ function Admin() {
     // a recruiter reviewing 300 applicants needs the full list in one file.
     let q = sb.from("applicants").select("*");
     if (filterStage !== "All") q = q.eq("stage", filterStage);
+    else q = excludeHiddenStages(q);
     if (filterExp === "With") q = q.neq("ai_category", "No Experience");
     if (filterExp === "Without") q = q.eq("ai_category", "No Experience");
     if (quick === "voice") q = q.not("voice_path", "is", null);
