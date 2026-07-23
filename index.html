@@ -1041,7 +1041,7 @@ function ApplyForm({
       children: ["Join the Bayani — ", CONFIG.COMPANY]
     }, void 0, true), /*#__PURE__*/_jsxDEV("p", {
       className: "text-sm mb-5",
-      children: ["Questions? ", /*#__PURE__*/_jsxDEV("a", { href: "viber://chat?number=%2B" + CONFIG.CONTACT_VIBER, target: "_blank", rel: "noreferrer", style: { color: "inherit", textDecoration: "underline" } }, "\ud83d\udcf1 Message us on Viber")]
+      children: ["Questions? ", /*#__PURE__*/_jsxDEV("a", { href: "viber://chat?number=%2B" + CONFIG.CONTACT_VIBER, target: "_blank", rel: "noreferrer", style: { color: "inherit", textDecoration: "underline" }, children: "\ud83d\udcf1 Message us on Viber" }, void 0, false)]
     }, void 0, true), /*#__PURE__*/_jsxDEV("div", {
       className: "space-y-3",
       children: [/*#__PURE__*/_jsxDEV("input", {
@@ -1904,7 +1904,7 @@ function Admin() {
               children: [a.position, " · ", new Date(a.created_at).toLocaleDateString()]
             }, void 0, true), a.phone && /*#__PURE__*/_jsxDEV("p", {
               className: "text-xs",
-              children: /*#__PURE__*/_jsxDEV("a", { href: "tel:" + firstPhone(a.phone), style: { color: "inherit", textDecoration: "underline" }, onClick: e => e.stopPropagation() }, "\ud83d\udcde " + firstPhone(a.phone))
+              children: /*#__PURE__*/_jsxDEV("a", { href: "tel:" + firstPhone(a.phone), style: { color: "inherit", textDecoration: "underline" }, onClick: e => e.stopPropagation(), children: "\ud83d\udcde " + firstPhone(a.phone) }, void 0, false)
             }, void 0, false)]
           }, void 0, true), /*#__PURE__*/_jsxDEV(Pill, {
             bg: stageColor[a.stage] || "#8f9bd4",
@@ -1942,7 +1942,7 @@ function Admin() {
               }, void 0, false), /*#__PURE__*/_jsxDEV("p", {
                 children: a.email
               }, void 0, false), /*#__PURE__*/_jsxDEV("p", {
-                children: a.phone ? [/*#__PURE__*/_jsxDEV("a", { href: "tel:" + firstPhone(a.phone), style: { color: "inherit", textDecoration: "underline", fontWeight: 600, fontSize: "1.05em" } }, "\ud83d\udcde " + firstPhone(a.phone)), viberLink(a.phone) && /*#__PURE__*/_jsxDEV("a", { href: viberLink(a.phone), target: "_blank", rel: "noreferrer", style: { marginLeft: "8px" }, title: "Message on Viber" }, "\ud83d\udcf1")] : /*#__PURE__*/_jsxDEV("span", { style: { opacity: 0.5 } }, "\ud83d\udcde No phone number on file")
+                children: a.phone ? [/*#__PURE__*/_jsxDEV("a", { href: "tel:" + firstPhone(a.phone), style: { color: "inherit", textDecoration: "underline", fontWeight: 600, fontSize: "1.05em" }, children: "\ud83d\udcde " + firstPhone(a.phone) }, void 0, false), viberLink(a.phone) && /*#__PURE__*/_jsxDEV("a", { href: viberLink(a.phone), target: "_blank", rel: "noreferrer", style: { marginLeft: "8px" }, title: "Message on Viber", children: "\ud83d\udcf1" }, void 0, false)] : /*#__PURE__*/_jsxDEV("span", { style: { opacity: 0.5 }, children: "\ud83d\udcde No phone number on file" }, void 0, false)
               }, void 0, false), /*#__PURE__*/_jsxDEV("p", {
                       className: "text-xs opacity-80",
                       children: "📍 " + (a.address || "No address given") + (a.relocate ? " · ✅ Willing to relocate" : "")
