@@ -597,7 +597,7 @@ const STAGES = ["Applied", "Shortlisted", "Voice/Assessment", "For Interview", "
 // These stages are "closed" — once an applicant lands here, they should only ever
 // show up when their own stage tab is explicitly selected, never in "All", "With
 // experience", "Voice done", or "Assessment done" views.
-const HIDDEN_FROM_ALL_STAGES = ["Rejected", "Hire in the Future", "Hired"];
+const HIDDEN_FROM_ALL_STAGES = ["Rejected", "Hire in the Future", "Hired", "For Interview"];
 const excludeHiddenStages = q => HIDDEN_FROM_ALL_STAGES.reduce((qq, s) => qq.not("stage", "eq", s), q);
 const stageColor = {
   "Applied": "#8f9bd4",
