@@ -812,6 +812,72 @@ function NotesBox({ a, patch }) {
   );
 }
 
+function EditApplicantBox({ a, patch, notify }) {
+  // Lets admin correct/update an applicant's own submitted info (name, email,
+  // phone, address, relocate flag, source, referred_by) — e.g. typo fixes or
+  // updating a number after a phone call. Collapsed by default; explicit
+  // Save/Cancel (no auto-save) since this touches contact-critical fields.
+  const e = React.createElement;
+  const blank = () => ({
+    name: a.name || "",
+    email: a.email || "",
+    phone: a.phone || "",
+    address: a.address || "",
+    relocate: !!a.relocate,
+    source: a.source || "",
+    referred_by: a.referred_by || ""
+  });
+  const [editing, setEditing] = useState(false);
+  const [f, setF] = useState(blank());
+  const [saving, setSaving] = useState(false);
+  const set = (k, v) => setF(prev => ({ ...prev, [k]: v }));
+  const open = () => { setF(blank()); setEditing(true); };
+  const cancel = () => { setF(blank()); setEditing(false); };
+  const save = async () => {
+    setSaving(true);
+    await patch(a.id, {
+      name: f.name.trim(),
+      email: f.email.trim(),
+      phone: f.phone.trim(),
+      address: f.address.trim(),
+      relocate: f.relocate,
+      source: f.source.trim(),
+      referred_by: f.referred_by.trim()
+    });
+    setSaving(false);
+    setEditing(false);
+    if (notify) notify("✏️ Applicant info updated");
+  };
+  const field = (label, key, type) => e("div", null,
+    e("label", { className: "text-[10px] opacity-50 uppercase" }, label),
+    e("input", { type: type || "text", value: f[key], onChange: ev => set(key, ev.target.value) })
+  );
+  if (!editing) {
+    return e("div", { className: "mt-3" },
+      e("button", { className: "btn2 text-xs", onClick: open }, "✏️ Edit applicant info")
+    );
+  }
+  return e("div", { className: "mt-3 card p-3 space-y-2", style: { borderColor: "#f5c542" } },
+    e("p", { className: "text-xs opacity-50 uppercase mb-1" }, "✏️ Edit applicant info"),
+    e("div", { className: "grid md:grid-cols-2 gap-2" },
+      field("Name", "name"),
+      field("Email", "email"),
+      field("Phone", "phone"),
+      field("Address", "address"),
+      field("Source", "source"),
+      field("Referred by", "referred_by"),
+      e("label", { className: "flex items-center gap-2 text-xs mt-1" },
+        e("input", { type: "checkbox", style: { width: "auto" }, checked: f.relocate, onChange: ev => set("relocate", ev.target.checked) }),
+        "Willing to relocate"
+      )
+    ),
+    e("div", { className: "flex gap-2 mt-2" },
+      e("button", { className: "btn2 text-xs", disabled: saving, onClick: save }, saving ? "Saving…" : "💾 Save"),
+      e("button", { className: "btn2 text-xs", onClick: cancel, disabled: saving }, "Cancel")
+    )
+  );
+}
+
 function AnswersViewer({ a }) {
   const e = React.createElement;
   const answers = (a.assessment && a.assessment.answers) || {};
@@ -1963,7 +2029,7 @@ function Admin() {
                 children: "Not yet taken"
               }, void 0, false)]
             }, void 0, true)]
-          }, void 0, true), /*#__PURE__*/_jsxDEV(NotesBox, { a: a, patch: patch }, void 0, false), /*#__PURE__*/_jsxDEV("div", {
+          }, void 0, true), /*#__PURE__*/_jsxDEV(EditApplicantBox, { a: a, patch: patch, notify: notify }, void 0, false), /*#__PURE__*/_jsxDEV(NotesBox, { a: a, patch: patch }, void 0, false), /*#__PURE__*/_jsxDEV("div", {
             className: "flex flex-wrap gap-2 items-center",
             children: [/*#__PURE__*/_jsxDEV("select", {
               style: {
