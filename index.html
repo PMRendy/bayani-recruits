@@ -14,6 +14,7 @@
 <style>
   * { box-sizing: border-box; }
   body { background:#0d1226; color:#e8eaf6; font-family: ui-sans-serif, system-ui, sans-serif; -webkit-font-smoothing:antialiased; }
+  .sticky-header { box-shadow: 0 8px 12px -6px rgba(0,0,0,0.55); }
   ::selection { background:#f5c54255; }
   ::-webkit-scrollbar { width:10px; height:10px; }
   ::-webkit-scrollbar-thumb { background:#38407a; border-radius:8px; }
@@ -1863,6 +1864,20 @@ function Admin() {
     });
   };
   const clearSelection = () => setSelected(new Set());
+  const visibleApps = showStaleOnly ? apps.filter(isStale) : apps;
+  const allVisibleSelected = visibleApps.length > 0 && visibleApps.every(a => selected.has(a.id));
+  const toggleSelectAllVisible = () => {
+    setSelected(prev => {
+      if (allVisibleSelected) {
+        const next = new Set(prev);
+        visibleApps.forEach(a => next.delete(a.id));
+        return next;
+      }
+      const next = new Set(prev);
+      visibleApps.forEach(a => next.add(a.id));
+      return next;
+    });
+  };
   const selectedApps = apps.filter(a => selected.has(a.id));
   const bulkApplyStage = async () => {
     if (!selectedApps.length) return;
@@ -1922,6 +1937,9 @@ function Admin() {
       className: "fixed top-4 right-4 card px-4 py-3 text-sm z-50",
       children: toast
     }, void 0, false), composeFor && /*#__PURE__*/_jsxDEV(ComposeModal, { a: composeFor, onClose: () => setComposeFor(null), notify: notify, logEmail: logEmail }, void 0, false), templatesOpen && /*#__PURE__*/_jsxDEV(TemplatesModal, { onClose: () => setTemplatesOpen(false), notify: notify }, void 0, false), calendarOpen && /*#__PURE__*/_jsxDEV(CalendarModal, { onClose: () => setCalendarOpen(false) }, void 0, false), leaderboardOpen && /*#__PURE__*/_jsxDEV(LeaderboardModal, { onClose: () => setLeaderboardOpen(false) }, void 0, false), /*#__PURE__*/_jsxDEV("div", {
+      className: "sticky-header",
+      style: { position: "sticky", top: 0, zIndex: 30, background: "#0d1226", paddingTop: "1px" },
+      children: [/*#__PURE__*/_jsxDEV("div", {
       className: "grid grid-cols-2 md:grid-cols-7 gap-3 mb-5",
       children: [
         ["Total applicants", counts.total, () => { setFilterStage("All"); setFilterExp("All"); setQuick(null); setPage(0); }, filterStage === "All" && filterExp === "All" && !quick],
@@ -2010,7 +2028,7 @@ function Admin() {
         style: { marginLeft: "auto" },
         onClick: () => setShowStaleOnly(!showStaleOnly),
         children: "⏳ Needs follow-up"
-      }, void 0, false), /*#__PURE__*/_jsxDEV("button", { className: "btn2 text-xs", onClick: () => setCalendarOpen(true), children: "📅 Interview calendar" }, void 0, false), /*#__PURE__*/_jsxDEV("button", { className: "btn2 text-xs", onClick: () => setLeaderboardOpen(true), children: "🏆 Referral leaderboard" }, void 0, false), /*#__PURE__*/_jsxDEV("button", { className: "btn2 text-xs", onClick: () => setTemplatesOpen(true), children: "✉️ Email templates" }, void 0, false), /*#__PURE__*/_jsxDEV("button", { className: "btn2 text-xs", onClick: () => exportCSV(), children: "📄 Export CSV" }, void 0, false), /*#__PURE__*/_jsxDEV("button", { className: "btn2 text-xs", onClick: () => reScreenAll(), children: "🔄 Re-screen all" }, void 0, false), /*#__PURE__*/_jsxDEV("button", { className: "btn2 text-xs", onClick: () => changeAdminPw(), children: "🔑 Change password" }, void 0, false)]
+      }, void 0, false), /*#__PURE__*/_jsxDEV("button", { className: allVisibleSelected ? "btn text-xs" : "btn2 text-xs", onClick: toggleSelectAllVisible, children: (allVisibleSelected ? "☑️ Unselect all (" : "☐ Select all (") + visibleApps.length + ")" }, void 0, false), _jsxDEV("button", { className: "btn2 text-xs", onClick: () => setCalendarOpen(true), children: "📅 Interview calendar" }, void 0, false), /*#__PURE__*/_jsxDEV("button", { className: "btn2 text-xs", onClick: () => setLeaderboardOpen(true), children: "🏆 Referral leaderboard" }, void 0, false), /*#__PURE__*/_jsxDEV("button", { className: "btn2 text-xs", onClick: () => setTemplatesOpen(true), children: "✉️ Email templates" }, void 0, false), /*#__PURE__*/_jsxDEV("button", { className: "btn2 text-xs", onClick: () => exportCSV(), children: "📄 Export CSV" }, void 0, false), /*#__PURE__*/_jsxDEV("button", { className: "btn2 text-xs", onClick: () => reScreenAll(), children: "🔄 Re-screen all" }, void 0, false), /*#__PURE__*/_jsxDEV("button", { className: "btn2 text-xs", onClick: () => changeAdminPw(), children: "🔑 Change password" }, void 0, false)]
     }, void 0, true), selected.size > 0 && /*#__PURE__*/_jsxDEV("div", {
       className: "card p-3 mb-4 flex flex-wrap gap-2 items-center",
       style: { borderColor: "#f5c542" },
@@ -2032,6 +2050,7 @@ function Admin() {
         /*#__PURE__*/_jsxDEV("button", { className: "btn2 text-xs", disabled: bulkBusy, onClick: bulkSendEmail, children: bulkBusy ? "Sending…" : "Send email" }, void 0, false),
         /*#__PURE__*/_jsxDEV("button", { className: "btn2 text-xs", style: { marginLeft: "auto" }, onClick: clearSelection, children: "Clear selection" }, void 0, false)
       ]
+    }, void 0, true)]
     }, void 0, true), loading && /*#__PURE__*/_jsxDEV("p", {
       className: "text-center opacity-60 py-6",
       children: "Loading… 🌙"
