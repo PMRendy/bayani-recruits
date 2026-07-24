@@ -879,6 +879,7 @@ function LeaderboardModal({ onClose }) {
 }
 
 const RANK_AI_MAX_APPLICANTS = 60; // must match bayani-ai-proxy's MAX_APPLICANTS
+const RANK_EXCLUDED_STAGES = ["Hired", "Rejected", "Did Not Continue"];
 
 function RankModal({ applicants, onClose }) {
   const e = React.createElement;
@@ -887,21 +888,25 @@ function RankModal({ applicants, onClose }) {
   const [results, setResults] = useState(null); // { mode, keywords?, scored }
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState("");
+  const [includeClosed, setIncludeClosed] = useState(false);
+
+  const eligible = includeClosed ? applicants : applicants.filter(a => !RANK_EXCLUDED_STAGES.includes(a.stage));
+  const excludedCount = applicants.length - eligible.length;
 
   const runKeyword = () => {
     const text = jd.trim();
     if (!text) { alert("Paste a job description or skill list first."); return; }
     const keywords = extractJobKeywords(text);
     if (!keywords.length) { alert("Couldn't find enough specific terms in that text — try adding more detail (skills, tools, experience type)."); return; }
-    const scored = applicants.map(a => ({ a, ...scoreApplicantForJD(a, keywords) })).sort((x, y) => y.pct - x.pct);
+    const scored = eligible.map(a => ({ a, ...scoreApplicantForJD(a, keywords) })).sort((x, y) => y.pct - x.pct);
     setResults({ mode: "keyword", keywords, scored });
   };
 
   const runAI = async () => {
     const text = jd.trim();
     if (!text) { alert("Paste a job description or skill list first."); return; }
-    if (applicants.length > RANK_AI_MAX_APPLICANTS) {
-      alert(`AI ranking is limited to ${RANK_AI_MAX_APPLICANTS} applicants per run — narrow your filters first (you have ${applicants.length}).`);
+    if (eligible.length > RANK_AI_MAX_APPLICANTS) {
+      alert(`AI ranking is limited to ${RANK_AI_MAX_APPLICANTS} applicants per run — narrow your filters first (you have ${eligible.length}).`);
       return;
     }
     setAiLoading(true);
@@ -909,7 +914,7 @@ function RankModal({ applicants, onClose }) {
     try {
       const payload = {
         jd: text,
-        applicants: applicants.map(a => ({
+        applicants: eligible.map(a => ({
           id: a.id, name: a.name, resume_text: a.resume_text, exp_text: a.exp_text, position: a.position
         }))
       };
@@ -921,7 +926,7 @@ function RankModal({ applicants, onClose }) {
       const j = await r.json();
       if (!r.ok || !j.ok) throw new Error(j.error || `AI ranking failed (HTTP ${r.status})`);
       const byId = {};
-      applicants.forEach(a => { byId[String(a.id)] = a; });
+      eligible.forEach(a => { byId[String(a.id)] = a; });
       const scored = j.results
         .map(res => ({ a: byId[String(res.id)], pct: res.score, justification: res.justification }))
         .filter(r => r.a)
@@ -974,12 +979,21 @@ function RankModal({ applicants, onClose }) {
       e("p", { className: "text-xs opacity-60 mb-3" },
         mode === "ai"
           ? "Sends the job description + each applicant's resume text to Gemini AI, which reads and judges fit like a person would (not just word-matching). Free tier, but capped at " + RANK_AI_MAX_APPLICANTS + " applicants per run."
-          : "Paste the job description or a list of required skills. We'll re-score every applicant currently in your filtered list (" + applicants.length + ") against it. Free, keyword-based — not a paid AI service."
+          : "Paste the job description or a list of required skills. We'll re-score every eligible applicant in your filtered list against it. Free, keyword-based — not a paid AI service."
       ),
       e("textarea", { rows: 8, placeholder: "Paste the job description...", value: jd, onChange: ev => setJd(ev.target.value) }),
       aiError && e("p", { className: "text-xs mt-2", style: { color: "#ff8787" } }, "⚠️ " + aiError),
+      e("label", { className: "flex items-center gap-2 mt-3 text-xs opacity-70", style: { cursor: "pointer" } },
+        e("input", {
+          type: "checkbox",
+          checked: includeClosed,
+          onChange: ev => setIncludeClosed(ev.target.checked),
+          style: { width: "16px", height: "16px", padding: 0, flexShrink: 0, accentColor: "#f5c542" }
+        }),
+        "Include Hired / Rejected / Did Not Continue applicants" + (excludedCount > 0 ? ` (${excludedCount} currently excluded)` : "")
+      ),
       e("div", { className: "flex items-center justify-between mt-3 flex-wrap gap-2" },
-        e("p", { className: "text-xs opacity-50" }, "Will rank " + applicants.length + " applicant(s) matching current filters"),
+        e("p", { className: "text-xs opacity-50" }, "Will rank " + eligible.length + " applicant(s) matching current filters"),
         e("button", { className: "btn", onClick: run, disabled: aiLoading }, aiLoading ? "Thinking…" : "Rank Candidates →")
       )
     ) : e("div", null,
