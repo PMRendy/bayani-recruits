@@ -655,6 +655,50 @@ function LightboxModal({ img, onClose }) {
   );
 }
 
+const RESUME_SECTION_HEADERS = [
+  "ABOUT ME", "OBJECTIVE", "CAREER OBJECTIVE", "SUMMARY", "PROFILE",
+  "EDUCATION", "EDUCATIONAL BACKGROUND",
+  "EXPERIENCE", "WORK EXPERIENCE", "EMPLOYMENT HISTORY", "PROFESSIONAL EXPERIENCE",
+  "SKILLS", "SKILLS SUMMARY", "TECHNICAL SKILLS", "CORE COMPETENCIES",
+  "CERTIFICATIONS", "TRAINING", "TRAININGS", "SEMINARS",
+  "REFERENCES", "PERSONAL INFORMATION", "CONTACT", "CONTACT INFORMATION",
+  "QUALIFICATIONS", "ACHIEVEMENTS", "LANGUAGES", "AFFILIATIONS"
+];
+
+function formatResumeLines(raw) {
+  if (!raw) return [];
+  let t = raw;
+  // Put each bullet on its own line
+  t = t.replace(/•/g, "\n• ");
+  // Break before recognizable section headers wherever they appear mid-line
+  RESUME_SECTION_HEADERS.forEach(h => {
+    const pattern = h.replace(/ /g, "\\s+");
+    const re = new RegExp("([a-z0-9\\)\\.,])\\s(" + pattern + ")\\b\\s*", "gi");
+    t = t.replace(re, "$1\n\n$2\n");
+    const reStart = new RegExp("^(" + pattern + ")\\b\\s*", "i");
+    t = t.replace(reStart, "$1\n");
+  });
+  t = t.replace(/\n{3,}/g, "\n\n");
+  return t.split("\n").map(l => l.trim()).filter(Boolean);
+}
+
+function ResumeTextView({ text }) {
+  const e = React.createElement;
+  const lines = formatResumeLines(text);
+  return e("div", { className: "text-xs opacity-80 mt-2 max-h-64 overflow-y-auto bg-black/30 rounded-lg p-3 space-y-1" },
+    lines.map((line, i) => {
+      const upper = line.toUpperCase();
+      const isHeader = RESUME_SECTION_HEADERS.some(h => upper.startsWith(h)) && line.length < 40;
+      const isBullet = line.startsWith("•");
+      return e("p", {
+        key: i,
+        className: isHeader ? "font-bold gold uppercase mt-2 mb-1 text-[11px]" : "",
+        style: isBullet ? { paddingLeft: "12px" } : {}
+      }, line);
+    })
+  );
+}
+
 const TEMPLATE_TYPES = [
   { id: "received", label: "Application received (auto, sent on submit)" },
   { id: "nextSteps", label: "Next steps: voice + assessment" },
@@ -2178,10 +2222,7 @@ function Admin() {
                 children: [/*#__PURE__*/_jsxDEV("summary", {
                   className: "text-xs opacity-60 cursor-pointer",
                   children: "📄 View full resume text"
-                }, void 0, false), /*#__PURE__*/_jsxDEV("pre", {
-                  className: "text-xs opacity-80 whitespace-pre-wrap mt-2 max-h-64 overflow-y-auto bg-black/30 rounded-lg p-3",
-                  children: a.resume_text
-                }, void 0, false)]
+                }, void 0, false), /*#__PURE__*/_jsxDEV(ResumeTextView, { text: a.resume_text }, void 0, false)]
               }, void 0, true)]
             }, void 0, true), /*#__PURE__*/_jsxDEV("div", {
               children: [/*#__PURE__*/_jsxDEV("p", {
