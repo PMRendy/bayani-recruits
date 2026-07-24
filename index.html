@@ -2508,9 +2508,11 @@ function Admin() {
                 /*#__PURE__*/_jsxDEV("span", { className: "text-xs opacity-60", children: "📅 Shadow date:" }, void 0, false),
                 /*#__PURE__*/_jsxDEV("input", {
                   type: "date",
-                  style: { width: "auto" },
+                  style: { width: "auto", cursor: "pointer" },
                   value: a.interview_date ? a.interview_date.slice(0, 10) : "",
-                  onChange: e => patch(a.id, { interview_date: e.target.value || null })
+                  onChange: e => patch(a.id, { interview_date: e.target.value || null }),
+                  onClick: e => { try { e.target.showPicker && e.target.showPicker(); } catch (err) {} },
+                  onFocus: e => { try { e.target.showPicker && e.target.showPicker(); } catch (err) {} }
                 }, void 0, false)
               ]
             }, void 0, true), /*#__PURE__*/_jsxDEV("div", {
