@@ -68,6 +68,7 @@ const CONFIG = {
   SUPABASE_URL: "https://leqxjjcwgsulyidlgacr.supabase.co",
   SUPABASE_KEY: "sb_publishable_kTkxLLUKROIpTW9TgtGcTQ_2cQxcdES",
   EMAIL_PROXY_URL: "https://bayani-email-proxy.netlify.app/send-email",
+  RANK_AI_PROXY_URL: "https://bayani-ai-proxy.netlify.app/rank",
   // palitan after mo i-deploy yung email proxy
   ADMIN_PASSWORD: "smbvs2026",
   // PALITAN MO ITO
@@ -240,6 +241,41 @@ function analyzeResume(text, expText) {
 
   return { score, category, summary, flags };
 }
+
+// ===== Rank for a Role: free keyword-based JD matching =====
+// Given a pasted job description, pull out the specific skill/requirement
+// terms mentioned (reusing SCREEN_RULES phrases + generic significant words),
+// then score every applicant by how many of those terms appear in their
+// resume/experience text. Transparent keyword matching, not true AI reasoning —
+// good enough to prioritize a stack of applicants for a specific role.
+const JD_STOPWORDS = new Set(["the","a","an","and","or","of","in","to","for","with","on","at","by","from","is","are","be","as","that","this","will","have","has","we","you","your","our","looking","required","must","plus","preferred","strong","years","year","experience","who","candidate","candidates","role","job","position","responsibilities","skill","skills","ability","able","work","working","team","other","related","etc","using","use","good","also","not","any","all","can","should","would","need","needs","needed","new","more","most","per","day","time","hour","hours","full","part"]);
+function extractJobKeywords(jd) {
+  const t = " " + jd.toLowerCase() + " ";
+  const found = [];
+  const allKnown = [...SCREEN_RULES.vaBpo, ...SCREEN_RULES.transferable, ...SCREEN_RULES.bonus, ...SCREEN_RULES.eduSignals];
+  for (const k of allKnown) {
+    const kw = k.trim();
+    if (kw.length > 1 && t.includes(kw) && !found.includes(kw)) found.push(kw);
+  }
+  const words = jd.toLowerCase().replace(/[^a-z0-9+\s]/g, " ").split(/\s+/).filter(w => w.length >= 3 && !JD_STOPWORDS.has(w) && !/^\d+$/.test(w));
+  const freq = {};
+  for (const w of words) freq[w] = (freq[w] || 0) + 1;
+  const extras = Object.keys(freq).filter(w => !found.some(f => f.includes(w))).sort((a, b) => freq[b] - freq[a]);
+  for (const w of extras) {
+    if (found.length >= 25) break;
+    found.push(w);
+  }
+  return found;
+}
+function scoreApplicantForJD(a, keywords) {
+  const raw = ((a.resume_text || "") + " " + (a.exp_text || "") + " " + (a.position || "")).toLowerCase();
+  const t = " " + raw + " ";
+  const matched = keywords.filter(k => t.includes(k));
+  const missing = keywords.filter(k => !t.includes(k));
+  const pct = keywords.length ? Math.round(matched.length / keywords.length * 100) : 0;
+  return { matched, missing, pct };
+}
+
 function scoreWrittenLocal(answer, minWords) {
   const a = (answer || "").trim();
   if (!a) return 0;
@@ -842,6 +878,150 @@ function LeaderboardModal({ onClose }) {
   );
 }
 
+const RANK_AI_MAX_APPLICANTS = 60; // must match bayani-ai-proxy's MAX_APPLICANTS
+
+function RankModal({ applicants, onClose }) {
+  const e = React.createElement;
+  const [jd, setJd] = useState("");
+  const [mode, setMode] = useState("keyword"); // "keyword" | "ai"
+  const [results, setResults] = useState(null); // { mode, keywords?, scored }
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState("");
+
+  const runKeyword = () => {
+    const text = jd.trim();
+    if (!text) { alert("Paste a job description or skill list first."); return; }
+    const keywords = extractJobKeywords(text);
+    if (!keywords.length) { alert("Couldn't find enough specific terms in that text — try adding more detail (skills, tools, experience type)."); return; }
+    const scored = applicants.map(a => ({ a, ...scoreApplicantForJD(a, keywords) })).sort((x, y) => y.pct - x.pct);
+    setResults({ mode: "keyword", keywords, scored });
+  };
+
+  const runAI = async () => {
+    const text = jd.trim();
+    if (!text) { alert("Paste a job description or skill list first."); return; }
+    if (applicants.length > RANK_AI_MAX_APPLICANTS) {
+      alert(`AI ranking is limited to ${RANK_AI_MAX_APPLICANTS} applicants per run — narrow your filters first (you have ${applicants.length}).`);
+      return;
+    }
+    setAiLoading(true);
+    setAiError("");
+    try {
+      const payload = {
+        jd: text,
+        applicants: applicants.map(a => ({
+          id: a.id, name: a.name, resume_text: a.resume_text, exp_text: a.exp_text, position: a.position
+        }))
+      };
+      const r = await fetch(CONFIG.RANK_AI_PROXY_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const j = await r.json();
+      if (!r.ok || !j.ok) throw new Error(j.error || `AI ranking failed (HTTP ${r.status})`);
+      const byId = {};
+      applicants.forEach(a => { byId[String(a.id)] = a; });
+      const scored = j.results
+        .map(res => ({ a: byId[String(res.id)], pct: res.score, justification: res.justification }))
+        .filter(r => r.a)
+        .sort((x, y) => y.pct - x.pct);
+      setResults({ mode: "ai", scored });
+    } catch (err) {
+      setAiError(err.message || "AI ranking failed — check your connection and try again.");
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const run = () => (mode === "ai" ? runAI() : runKeyword());
+
+  const exportRanked = () => {
+    if (!results) return;
+    const esc = v => '"' + String(v ?? "").replace(/"/g, '""') + '"';
+    const isAI = results.mode === "ai";
+    const cols = isAI
+      ? ["rank", "name", "email", "ai_match_pct", "ai_justification", "ai_category", "stage"]
+      : ["rank", "name", "email", "match_pct", "matched_keywords", "missing_keywords", "ai_category", "stage"];
+    const rows = [cols.join(",")].concat(results.scored.map((r, i) => (isAI ? [
+      i + 1, r.a.name, r.a.email, r.pct + "%", r.justification || "", r.a.ai_category || "", r.a.stage || ""
+    ] : [
+      i + 1, r.a.name, r.a.email, r.pct + "%", r.matched.join("; "), r.missing.join("; "), r.a.ai_category || "", r.a.stage || ""
+    ]).map(esc).join(",")));
+    const blob = new Blob([rows.join("\n")], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "bayani-ranked-" + new Date().toISOString().slice(0, 10) + ".csv";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  return e(ModalShell, { title: "🎯 Rank Candidates for a Role", onClose, wide: true },
+    !results ? e("div", null,
+      e("div", { className: "flex gap-2 mb-3" },
+        e("button", {
+          className: mode === "keyword" ? "btn text-xs" : "btn2 text-xs",
+          onClick: () => setMode("keyword")
+        }, "🆓 Free (keyword match)"),
+        e("button", {
+          className: mode === "ai" ? "btn text-xs" : "btn2 text-xs",
+          onClick: () => setMode("ai")
+        }, "✨ AI-powered (Gemini)")
+      ),
+      e("p", { className: "text-xs opacity-60 mb-3" },
+        mode === "ai"
+          ? "Sends the job description + each applicant's resume text to Gemini AI, which reads and judges fit like a person would (not just word-matching). Free tier, but capped at " + RANK_AI_MAX_APPLICANTS + " applicants per run."
+          : "Paste the job description or a list of required skills. We'll re-score every applicant currently in your filtered list (" + applicants.length + ") against it. Free, keyword-based — not a paid AI service."
+      ),
+      e("textarea", { rows: 8, placeholder: "Paste the job description...", value: jd, onChange: ev => setJd(ev.target.value) }),
+      aiError && e("p", { className: "text-xs mt-2", style: { color: "#ff8787" } }, "⚠️ " + aiError),
+      e("div", { className: "flex items-center justify-between mt-3 flex-wrap gap-2" },
+        e("p", { className: "text-xs opacity-50" }, "Will rank " + applicants.length + " applicant(s) matching current filters"),
+        e("button", { className: "btn", onClick: run, disabled: aiLoading }, aiLoading ? "Thinking…" : "Rank Candidates →")
+      )
+    ) : e("div", null,
+      results.mode === "ai"
+        ? e("p", { className: "text-xs opacity-60 mb-3" }, "✨ AI-powered ranking (Gemini) — scored by reading each resume against the job description.")
+        : e("p", { className: "text-xs opacity-60 mb-3" }, "Matched against: " + results.keywords.slice(0, 12).join(", ") + (results.keywords.length > 12 ? " …" : "")),
+      results.scored.length === 0 ? e("p", { className: "text-sm opacity-60" }, "No applicants in the current filtered list.") :
+      e("div", { className: "space-y-2", style: { maxHeight: "50vh", overflowY: "auto" } },
+        results.scored.map((r, i) => e("div", {
+          key: r.a.id,
+          className: "flex gap-3 items-start p-3 rounded-lg",
+          style: i === 0 ? { border: "1px solid #f5c542", background: "#1c2140" } : { background: "rgba(0,0,0,0.2)" }
+        },
+          e("div", { className: "font-bold text-lg", style: { minWidth: "28px", color: i === 0 ? "#f5c542" : "#38407a" } }, String(i + 1)),
+          e("div", {
+            style: {
+              width: "40px", height: "40px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: "0.7rem", fontWeight: 700, flexShrink: 0,
+              border: "2px solid " + (i === 0 ? "#f5c542" : "#38407a"),
+              color: i === 0 ? "#f5c542" : "#e8eaf6"
+            }
+          }, r.pct + "%"),
+          e("div", { className: "flex-1" },
+            e("p", { className: "font-semibold text-sm" }, r.a.name),
+            results.mode === "ai"
+              ? e("p", { className: "text-xs opacity-70 mt-1" }, r.justification || "")
+              : e("p", { className: "text-xs opacity-70 mt-1" },
+                  (r.matched.length ? "Matched: " + r.matched.slice(0, 6).join(", ") : "No keyword matches") +
+                  (r.missing.length ? ". Missing: " + r.missing.slice(0, 4).join(", ") : "")
+                ),
+            e("p", { className: "text-xs opacity-50 mt-1" }, (r.a.ai_category || "—") + " · " + (r.a.stage || "—"))
+          )
+        ))
+      ),
+      e("div", { className: "flex gap-2 mt-4" },
+        e("button", { className: "btn2 text-xs", onClick: exportRanked }, "⬇️ Export ranked list (CSV)"),
+        e("button", { className: "btn2 text-xs", onClick: () => setResults(null) }, "← Edit job description")
+      )
+    )
+  );
+}
+
 function ComposeModal({ a, onClose, notify, logEmail }) {
   const e = React.createElement;
   const [subject, setSubject] = useState("");
@@ -1200,6 +1380,14 @@ function ApplyForm({
       className: "text-sm mb-5",
       children: ["Questions? ", /*#__PURE__*/_jsxDEV("a", { href: "viber://chat?number=%2B" + CONFIG.CONTACT_VIBER, target: "_blank", rel: "noreferrer", style: { color: "inherit", textDecoration: "underline" }, children: "\ud83d\udcf1 Message us on Viber" }, void 0, false)]
     }, void 0, true), /*#__PURE__*/_jsxDEV("div", {
+      className: "mb-5",
+      style: { border: "2px solid #f5c542", background: "rgba(245,197,66,0.12)", borderRadius: "10px", padding: "12px 14px" },
+      children: /*#__PURE__*/_jsxDEV("p", {
+        className: "text-sm font-bold",
+        style: { color: "#f5c542", margin: 0 },
+        children: "\u26a0\ufe0f This is a FULL-TIME role. We do not have any part-time positions available — please only apply if you can commit to full-time work."
+      }, void 0, false)
+    }, void 0, false), /*#__PURE__*/_jsxDEV("div", {
       className: "space-y-3",
       children: [/*#__PURE__*/_jsxDEV("input", {
         placeholder: "Full name",
@@ -1779,6 +1967,7 @@ function Admin() {
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [leaderboardOpen, setLeaderboardOpen] = useState(false);
+  const [rankOpen, setRankOpen] = useState(false);
   const [bulkStage, setBulkStage] = useState(STAGES[0]);
   const [bulkEmailType, setBulkEmailType] = useState("nextSteps");
   const [bulkBusy, setBulkBusy] = useState(false);
@@ -1999,7 +2188,7 @@ function Admin() {
     children: [toast && /*#__PURE__*/_jsxDEV("div", {
       className: "fixed top-4 right-4 card px-4 py-3 text-sm z-50",
       children: toast
-    }, void 0, false), composeFor && /*#__PURE__*/_jsxDEV(ComposeModal, { a: composeFor, onClose: () => setComposeFor(null), notify: notify, logEmail: logEmail }, void 0, false), templatesOpen && /*#__PURE__*/_jsxDEV(TemplatesModal, { onClose: () => setTemplatesOpen(false), notify: notify }, void 0, false), calendarOpen && /*#__PURE__*/_jsxDEV(CalendarModal, { onClose: () => setCalendarOpen(false) }, void 0, false), leaderboardOpen && /*#__PURE__*/_jsxDEV(LeaderboardModal, { onClose: () => setLeaderboardOpen(false) }, void 0, false), lightboxImg && /*#__PURE__*/_jsxDEV(LightboxModal, { img: lightboxImg, onClose: () => setLightboxImg(null) }, void 0, false), /*#__PURE__*/_jsxDEV("div", {
+    }, void 0, false), composeFor && /*#__PURE__*/_jsxDEV(ComposeModal, { a: composeFor, onClose: () => setComposeFor(null), notify: notify, logEmail: logEmail }, void 0, false), templatesOpen && /*#__PURE__*/_jsxDEV(TemplatesModal, { onClose: () => setTemplatesOpen(false), notify: notify }, void 0, false), calendarOpen && /*#__PURE__*/_jsxDEV(CalendarModal, { onClose: () => setCalendarOpen(false) }, void 0, false), leaderboardOpen && /*#__PURE__*/_jsxDEV(LeaderboardModal, { onClose: () => setLeaderboardOpen(false) }, void 0, false), rankOpen && /*#__PURE__*/_jsxDEV(RankModal, { applicants: visibleApps, onClose: () => setRankOpen(false) }, void 0, false), lightboxImg && /*#__PURE__*/_jsxDEV(LightboxModal, { img: lightboxImg, onClose: () => setLightboxImg(null) }, void 0, false), /*#__PURE__*/_jsxDEV("div", {
       className: "sticky-header",
       style: { position: "sticky", top: 0, zIndex: 30, background: "#0d1226", paddingTop: "1px" },
       children: [/*#__PURE__*/_jsxDEV("div", {
@@ -2091,7 +2280,7 @@ function Admin() {
         style: { marginLeft: "auto" },
         onClick: () => setShowStaleOnly(!showStaleOnly),
         children: "⏳ Needs follow-up"
-      }, void 0, false), /*#__PURE__*/_jsxDEV("button", { className: allVisibleSelected ? "btn text-xs" : "btn2 text-xs", onClick: toggleSelectAllVisible, children: (allVisibleSelected ? "☑️ Unselect all (" : "☐ Select all (") + visibleApps.length + ")" }, void 0, false), _jsxDEV("button", { className: "btn2 text-xs", onClick: () => setCalendarOpen(true), children: "📅 Interview calendar" }, void 0, false), /*#__PURE__*/_jsxDEV("button", { className: "btn2 text-xs", onClick: () => setLeaderboardOpen(true), children: "🏆 Referral leaderboard" }, void 0, false), /*#__PURE__*/_jsxDEV("button", { className: "btn2 text-xs", onClick: () => setTemplatesOpen(true), children: "✉️ Email templates" }, void 0, false), /*#__PURE__*/_jsxDEV("button", { className: "btn2 text-xs", onClick: () => exportCSV(), children: "📄 Export CSV" }, void 0, false), /*#__PURE__*/_jsxDEV("button", { className: "btn2 text-xs", onClick: () => reScreenAll(), children: "🔄 Re-screen all" }, void 0, false), /*#__PURE__*/_jsxDEV("button", { className: "btn2 text-xs", onClick: () => changeAdminPw(), children: "🔑 Change password" }, void 0, false)]
+      }, void 0, false), /*#__PURE__*/_jsxDEV("button", { className: allVisibleSelected ? "btn text-xs" : "btn2 text-xs", onClick: toggleSelectAllVisible, children: (allVisibleSelected ? "☑️ Unselect all (" : "☐ Select all (") + visibleApps.length + ")" }, void 0, false), _jsxDEV("button", { className: "btn2 text-xs", onClick: () => setCalendarOpen(true), children: "📅 Interview calendar" }, void 0, false), /*#__PURE__*/_jsxDEV("button", { className: "btn2 text-xs", onClick: () => setLeaderboardOpen(true), children: "🏆 Referral leaderboard" }, void 0, false), /*#__PURE__*/_jsxDEV("button", { className: "btn2 text-xs", onClick: () => setTemplatesOpen(true), children: "✉️ Email templates" }, void 0, false), /*#__PURE__*/_jsxDEV("button", { className: "btn2 text-xs", onClick: () => exportCSV(), children: "📄 Export CSV" }, void 0, false), /*#__PURE__*/_jsxDEV("button", { className: "btn2 text-xs", onClick: () => reScreenAll(), children: "🔄 Re-screen all" }, void 0, false), /*#__PURE__*/_jsxDEV("button", { className: "btn2 text-xs", onClick: () => setRankOpen(true), children: "🎯 Rank for a Role" }, void 0, false), /*#__PURE__*/_jsxDEV("button", { className: "btn2 text-xs", onClick: () => changeAdminPw(), children: "🔑 Change password" }, void 0, false)]
     }, void 0, true), selected.size > 0 && /*#__PURE__*/_jsxDEV("div", {
       className: "card p-3 mb-4 flex flex-wrap gap-2 items-center",
       style: { borderColor: "#f5c542" },
