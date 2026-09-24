@@ -1971,6 +1971,8 @@ function Admin() {
   const [filterExp, setFilterExp] = useState("All");
   const [sort, setSort] = useState("ai");
   const [search, setSearch] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [page, setPage] = useState(0);
   const [open, setOpen] = useState(null);
   const [lightboxImg, setLightboxImg] = useState(null);
@@ -2023,6 +2025,8 @@ function Admin() {
     if (quick === "voice") q = q.not("voice_path", "is", null);
     if (quick === "assess") q = q.not("assessment", "is", null);
     if (search) q = q.or(`name.ilike.%${search}%,email.ilike.%${search}%,address.ilike.%${search}%`);
+    if (dateFrom) q = q.gte("created_at", dateFrom + "T00:00:00");
+    if (dateTo) q = q.lte("created_at", dateTo + "T23:59:59.999");
     if (sort === "ai") q = q.order("ai_score", {
       ascending: false,
       nullsFirst: false
@@ -2047,7 +2051,7 @@ function Admin() {
   }, []);
   useEffect(() => {
     load();
-  }, [filterStage, filterExp, sort, page, quick]);
+  }, [filterStage, filterExp, sort, page, quick, dateFrom, dateTo]);
   useEffect(() => {
     const t = setTimeout(() => {
       setPage(0);
@@ -2180,6 +2184,8 @@ function Admin() {
     if (quick === "voice") q = q.not("voice_path", "is", null);
     if (quick === "assess") q = q.not("assessment", "is", null);
     if (search) q = q.or(`name.ilike.%${search}%,email.ilike.%${search}%,address.ilike.%${search}%`);
+    if (dateFrom) q = q.gte("created_at", dateFrom + "T00:00:00");
+    if (dateTo) q = q.lte("created_at", dateTo + "T23:59:59.999");
     q = q.order("ai_score", { ascending: false, nullsFirst: false });
     const { data, error } = await q;
     if (error) { alert("Export failed: " + error.message); return; }
@@ -2289,7 +2295,23 @@ function Admin() {
           value: "new",
           children: "Sort: Newest"
         }, void 0, false)]
-      }, void 0, true), /*#__PURE__*/_jsxDEV("button", {
+      }, void 0, true), /*#__PURE__*/_jsxDEV("input", {
+        type: "date",
+        title: "Resume submitted from",
+        style: { width: "auto" },
+        value: dateFrom,
+        onChange: e => { setDateFrom(e.target.value); setPage(0); }
+      }, void 0, false), /*#__PURE__*/_jsxDEV("input", {
+        type: "date",
+        title: "Resume submitted to",
+        style: { width: "auto" },
+        value: dateTo,
+        onChange: e => { setDateTo(e.target.value); setPage(0); }
+      }, void 0, false), (dateFrom || dateTo) && /*#__PURE__*/_jsxDEV("button", {
+        className: "btn2 text-xs",
+        onClick: () => { setDateFrom(""); setDateTo(""); setPage(0); },
+        children: "✕ Clear dates"
+      }, void 0, false), /*#__PURE__*/_jsxDEV("button", {
         className: showStaleOnly ? "btn text-xs" : "btn2 text-xs",
         style: { marginLeft: "auto" },
         onClick: () => setShowStaleOnly(!showStaleOnly),
