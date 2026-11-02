@@ -1147,6 +1147,7 @@ function EditApplicantBox({ a, patch, notify }) {
       social_url: f.social_url.trim()
     };
     if (photoB64) patchBody.photo_base64 = photoB64;
+    try { if (photoB64 && window.BR_PHOTO_CACHE) window.BR_PHOTO_CACHE.set(a.id, photoB64); } catch (e) {}
     await patch(a.id, patchBody);
     setSaving(false);
     setEditing(false);
@@ -2015,9 +2016,12 @@ function Admin() {
       didNotContinue: dnc.count || 0
     });
   };
+  window.BR_LIST_COLS = window.BR_LIST_COLS || "id,created_at,name,email,phone,address,relocate,source,referred_by,social_url,position,resume_text,exp_text,ai_score,ai_category,ai_summary,ai_flags,stage,email_log,notes,assessment,voice_path,voice_rating,call_attempts,interview_date,last_called_at";
+  window.BR_PHOTO_CACHE = window.BR_PHOTO_CACHE || new Map();
   const load = async () => {
     setLoading(true);
-    let q = sb.from("applicants").select("*");
+    // Egress fix: list query skips photo_base64; thumbnails load separately and are cached.
+    let q = sb.from("applicants").select(window.BR_LIST_COLS);
     if (filterStage !== "All") q = q.eq("stage", filterStage);
     else q = excludeHiddenStages(q);
     if (filterExp === "With") q = q.neq("ai_category", "No Experience");
@@ -2043,7 +2047,29 @@ function Admin() {
       data,
       error
     } = await q;
-    if (!error) setApps(data || []);
+    if (error && window.BR_LIST_COLS !== "*" && /column|does not exist/i.test(error.message || "")) {
+      // A listed column is missing in the DB — fall back to the old behaviour instead of showing an empty list.
+      console.warn("BR_LIST_COLS fallback:", error.message);
+      window.BR_LIST_COLS = "*";
+      setLoading(false);
+      return load();
+    }
+    if (!error) {
+      const cache = window.BR_PHOTO_CACHE;
+      const merge = r => cache.has(r.id) ? { ...r, photo_base64: cache.get(r.id) } : r;
+      if (window.BR_LIST_COLS === "*") (data || []).forEach(r => cache.set(r.id, r.photo_base64 || null));
+      const rows = (data || []).map(merge);
+      setApps(rows);
+      // Fetch thumbnails only for applicants not yet cached this session (each photo downloads once, not on every filter/page change).
+      const missing = rows.filter(r => !cache.has(r.id)).map(r => r.id);
+      if (missing.length) {
+        sb.from("applicants").select("id,photo_base64").in("id", missing).then(({ data: ph }) => {
+          (ph || []).forEach(p => cache.set(p.id, p.photo_base64 || null));
+          missing.forEach(id => { if (!cache.has(id)) cache.set(id, null); });
+          setApps(cur => (cur || []).map(merge));
+        });
+      }
+    }
     setLoading(false);
   };
   useEffect(() => {
@@ -2176,7 +2202,8 @@ function Admin() {
   const exportCSV = async () => {
     // Export everything matching the current filters/search, not just the visible page —
     // a recruiter reviewing 300 applicants needs the full list in one file.
-    let q = sb.from("applicants").select("*");
+    // Egress fix: never export photo_base64 (base64 images) into CSV.
+    let q = sb.from("applicants").select(window.BR_LIST_COLS || "*");
     if (filterStage !== "All") q = q.eq("stage", filterStage);
     else q = excludeHiddenStages(q);
     if (filterExp === "With") q = q.neq("ai_category", "No Experience");
