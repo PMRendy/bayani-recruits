@@ -111,6 +111,7 @@ async function deleteApplicant(a, afterDone) {
   const sure = prompt('⚠️ PERMANENT DELETE for "' + a.name + '" — kasama ang voice recording at assessment. Type DELETE to confirm:');
   if (sure !== "DELETE") return;
   if (a.voice_path) { try { await sb.storage.from("voices").remove([a.voice_path]); } catch (e) {} }
+  if (a.resume_path) { try { await sb.storage.from("resumes").remove([a.resume_path]); } catch (e) {} }
   const { error } = await sb.from("applicants").delete().eq("id", a.id);
   if (error) alert("Delete failed: " + error.message + " — baka kailangan pa i-run yung delete policy SQL.");
   else afterDone();
@@ -1238,6 +1239,7 @@ function ApplyForm({
   });
   const [pdfB64, setPdfB64] = useState(null);
   const [resumeName, setResumeName] = useState("");
+  const [resumeFile, setResumeFile] = useState(null); // original PDF, uploaded to the "resumes" bucket on submit
   const [photoB64, setPhotoB64] = useState(null);
   const [photoErr, setPhotoErr] = useState("");
   const [busy, setBusy] = useState(false);
@@ -1257,6 +1259,7 @@ function ApplyForm({
     r.onload = () => {
       setPdfB64(r.result.split(",")[1]);
       setResumeName(file.name);
+      setResumeFile(file);
       setErr("");
     };
     r.readAsDataURL(file);
@@ -1370,6 +1373,19 @@ function ApplyForm({
       setErr("Something went wrong saving your application: " + (error.message || "unknown error") + " — please try again or contact rendy@smb-vs.com");
       setBusy(false);
       return;
+    }
+    // Keep the original PDF: upload to the "resumes" bucket as <applicant id>.pdf.
+    // Best-effort — a failed upload never blocks the application (the parsed text is already saved).
+    if (resumeFile) {
+      try {
+        const rPath = row.id + ".pdf";
+        const { error: upErr } = await sb.storage.from("resumes").upload(rPath, resumeFile, { contentType: "application/pdf", upsert: false });
+        if (!upErr) {
+          await sb.from("applicants").update({ resume_path: rPath, resume_name: resumeFile.name || "resume.pdf" }).eq("id", row.id);
+          row.resume_path = rPath;
+          row.resume_name = resumeFile.name || "resume.pdf";
+        } else console.warn("Resume upload failed:", upErr.message);
+      } catch (e) { console.warn("Resume upload failed:", e); }
     }
     const em = await buildEmail("received", { name: f.name.trim() });
     const sent = await sendEmail(f.email.trim(), em.subject, em.body);
@@ -2016,7 +2032,7 @@ function Admin() {
       didNotContinue: dnc.count || 0
     });
   };
-  window.BR_LIST_COLS = window.BR_LIST_COLS || "id,created_at,name,email,phone,address,relocate,source,referred_by,social_url,position,resume_text,exp_text,ai_score,ai_category,ai_summary,ai_flags,stage,email_log,notes,assessment,voice_path,voice_rating,call_attempts,interview_date,last_called_at";
+  window.BR_LIST_COLS = window.BR_LIST_COLS || "id,created_at,name,email,phone,address,relocate,source,referred_by,social_url,position,resume_text,exp_text,ai_score,ai_category,ai_summary,ai_flags,stage,email_log,notes,assessment,voice_path,voice_rating,resume_path,resume_name,call_attempts,interview_date,last_called_at";
   window.BR_PHOTO_CACHE = window.BR_PHOTO_CACHE || new Map();
   const load = async () => {
     setLoading(true);
@@ -2469,6 +2485,15 @@ function Admin() {
                 children: a.ai_flags.map((f, i) => /*#__PURE__*/_jsxDEV("li", {
                   children: f
                 }, i, false))
+              }, void 0, false), a.resume_path ? /*#__PURE__*/_jsxDEV("a", {
+                href: sb.storage.from("resumes").getPublicUrl(a.resume_path).data.publicUrl,
+                target: "_blank",
+                rel: "noreferrer",
+                className: "inline-block mt-3 text-xs px-3 py-1 rounded-lg border border-yellow-500/40 hover:bg-yellow-500/10",
+                children: "📎 Open original PDF" + (a.resume_name ? " (" + a.resume_name + ")" : "")
+              }, void 0, false) : /*#__PURE__*/_jsxDEV("p", {
+                className: "mt-3 text-[10px] opacity-40",
+                children: "📎 Original PDF not stored (applied before resume storage was added, or no PDF attached)"
               }, void 0, false), a.resume_text && /*#__PURE__*/_jsxDEV("details", {
                 className: "mt-3",
                 children: [/*#__PURE__*/_jsxDEV("summary", {
